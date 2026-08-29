@@ -188,6 +188,8 @@ Trace admission 的当前硬条件是：JSON/JSONL 仅允许 1--10,000 个对象
 
 尚未实现：真实 `solver_guard_submit` executor、不可由本机管理员覆盖的策略与启动配置、完整身份池/多维 quota、contract gate 的全部 app-server state transition 接入、Chief 进程消费 reconciliation wake、常驻后台 supervisor、artifact 与 execution block 的全量交叉引用、OS 级网络 egress、真实平台 monitor/榜单复查、chief-first 常驻 monitor/AutoPush，以及 Core/app-server 全部状态转移对 `ResearchCycleRecord` 的强制接入。cycle revoke/supersede 已具备控制面原语，但尚未扩展为所有 app-server 状态事件的统一生命周期服务。execution 校验仍是本地文件/时间窗证明，不是平台侧真实性证明；redline 仍是本地文本证据扫描；恢复金丝雀已实现持久化、runtime 绑定、两回合证据与 resume admission 门，并有篡改/冲突/过期负向测试，但真实 Core disposable-child runner 尚未接入，不能宣称完整 boot→active 自动闭环；故当前所有真实 Bohrium 写操作保持关闭。
 
+策略完整性现状：`solver_guard_submit` 会复算 Guard policy 文件 SHA-256 并与 `ASCODEX_POLICY_SHA256` 比较，启动脚本也要求管理员提供 approved digest。这只防止 policy 文件在启动后被静默替换，不等于不可篡改的 OS/签名信任根；issuance selector 仍受进程环境影响。
+
 能力等级：P0 本地 fail-closed 预检；P1 SQLite 预约与事件 replay；P2 真实 trace/artifact/redline admission；P3 只读平台 monitor 与榜单复查；P4 受控真实写 executor。没有 E2E 证据的能力只能标为设计或实验。
 
 本地验收命令：

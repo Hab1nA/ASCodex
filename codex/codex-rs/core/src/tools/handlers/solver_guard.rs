@@ -15,6 +15,7 @@ use codex_tools::ToolSpec;
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -231,6 +232,17 @@ impl SolverGuardSubmitHandler {
                 });
             }
         };
+        if let Err(err) = validate_policy_file_digest(
+            &policy_path,
+            &std::env::var("ASCODEX_POLICY_SHA256").unwrap_or_default(),
+        ) {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": format!("policy digest gate blocked: {err}"),
+            });
+        }
         let yaml = match std::fs::read_to_string(&policy_path) {
             Ok(yaml) => yaml,
             Err(err) => {
@@ -509,6 +521,31 @@ fn validate_submission_contract_files(
     Ok(())
 }
 
+fn validate_policy_file_digest(policy_file: &str, expected_digest: &str) -> Result<(), String> {
+    if policy_file.trim().is_empty() {
+        return Err("policy file is required".to_string());
+    }
+    if !Path::new(policy_file).is_absolute() {
+        return Err("policy file must be an absolute path".to_string());
+    }
+    if expected_digest.len() != 64 || !expected_digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("ASCODEX_POLICY_SHA256 must be a 64-character SHA-256".to_string());
+    }
+    let policy_bytes = std::fs::read(policy_file)
+        .map_err(|error| format!("cannot read Guard policy for digest: {error}"))?;
+    if policy_bytes.len() > 1024 * 1024 {
+        return Err("Guard policy exceeds 1 MiB".to_string());
+    }
+    let actual_digest = format!("{:x}", Sha256::digest(&policy_bytes));
+    if !actual_digest.eq_ignore_ascii_case(expected_digest) {
+        return Err(format!(
+            "policy digest mismatch: expected {expected_digest}, got {actual_digest}"
+        ));
+    }
+    Ok(())
+}
+
 impl CoreToolRuntime for SolverGuardSubmitHandler {}
 
 #[cfg(test)]
@@ -527,6 +564,30 @@ mod tests {
         )
         .expect_err("relative contract path must fail closed");
         assert!(error.contains("absolute path"));
+    }
+
+    #[test]
+    fn policy_digest_blocks_missing_short_and_tampered_digests() {
+        let dir = tempdir().expect("tempdir");
+        let policy_path = dir.path().join("policy.yaml");
+        std::fs::write(&policy_path, "channel: {}\n").expect("write policy");
+        let policy_path = policy_path.to_str().expect("utf-8 path");
+        let digest = format!("{:x}", Sha256::digest(b"channel: {}\n"));
+
+        let error = validate_policy_file_digest(policy_path, "")
+            .expect_err("missing policy digest must fail closed");
+        assert!(error.contains("64-character SHA-256"));
+
+        let error = validate_policy_file_digest(policy_path, "abc")
+            .expect_err("short policy digest must fail closed");
+        assert!(error.contains("64-character SHA-256"));
+
+        validate_policy_file_digest(policy_path, &digest).expect("matching digest passes");
+
+        std::fs::write(&policy_path, "channel: {}\nidentity: {}\n").expect("tamper policy");
+        let error = validate_policy_file_digest(policy_path, &digest)
+            .expect_err("tampered policy must fail closed");
+        assert!(error.contains("policy digest mismatch"));
     }
 
     #[test]

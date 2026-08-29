@@ -4,6 +4,7 @@ param(
     [string]$Action = 'check',
     [switch]$SolverMode,
     [string]$PolicyFile,
+    [string]$PolicySha256,
     [string]$LedgerFile,
     [string]$WorkspaceRoot,
     [string]$ContractFile,
@@ -52,6 +53,9 @@ try {
         if ([string]::IsNullOrWhiteSpace($PolicyFile)) {
             throw '-SolverMode requires -PolicyFile pointing to a local typed policy.'
         }
+        if ([string]::IsNullOrWhiteSpace($PolicySha256)) {
+            throw '-SolverMode requires -PolicySha256 from the approved policy baseline.'
+        }
         if ([string]::IsNullOrWhiteSpace($LedgerFile)) {
             throw '-SolverMode requires -LedgerFile pointing to a persistent local SQLite ledger.'
         }
@@ -71,6 +75,13 @@ try {
         }
         if ($policy.Path -like '*ascodex-solver-policy.example.yaml') {
             throw 'The example policy is schema-only and cannot enable solver mode.'
+        }
+        if ($PolicySha256 -notmatch '^[0-9a-fA-F]{64}$') {
+            throw '-PolicySha256 must be a 64-character hexadecimal SHA-256.'
+        }
+        $actualPolicySha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $policy.Path).Hash.ToLowerInvariant()
+        if ($actualPolicySha256 -ne $PolicySha256.ToLowerInvariant()) {
+            throw "Policy digest mismatch: expected $PolicySha256, got $actualPolicySha256."
         }
         $ledger = [IO.Path]::GetFullPath($LedgerFile)
         if (-not [IO.Path]::IsPathRooted($ledger)) {
@@ -92,6 +103,7 @@ try {
         }
         $env:ASCODEX_SOLVER_MODE = '1'
         $env:ASCODEX_SOLVER_POLICY_FILE = $policy.Path
+        $env:ASCODEX_POLICY_SHA256 = $actualPolicySha256
         $env:ASCODEX_SOLVER_LEDGER_FILE = $ledger
         $env:ASCODEX_CYCLE_ID = $CycleId
         $env:ASCODEX_CYCLE_EVENT_VERSION = $parsedCycleEventVersion.ToString([Globalization.CultureInfo]::InvariantCulture)
@@ -108,6 +120,7 @@ try {
     } else {
         Remove-Item Env:ASCODEX_SOLVER_MODE -ErrorAction SilentlyContinue
         Remove-Item Env:ASCODEX_SOLVER_POLICY_FILE -ErrorAction SilentlyContinue
+        Remove-Item Env:ASCODEX_POLICY_SHA256 -ErrorAction SilentlyContinue
         Remove-Item Env:ASCODEX_SOLVER_LEDGER_FILE -ErrorAction SilentlyContinue
         Remove-Item Env:ASCODEX_CYCLE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:ASCODEX_CYCLE_EVENT_VERSION -ErrorAction SilentlyContinue
