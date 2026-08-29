@@ -270,6 +270,13 @@ def main() -> int:
             else:
                 attempts_raw = args.attempts_response.read_bytes()
                 attempts_payload = json.loads(attempts_raw.decode("utf-8"))
+            artifact_dir = (
+                args.artifact_dir if args.artifact_dir is not None else args.output.parent
+            ).resolve()
+            challenge_path = artifact_dir / "responses" / f"challenge-{args.challenge_id}.json"
+            attempts_path = artifact_dir / "responses" / f"attempts-{args.challenge_id}.json"
+            write_atomic_bytes(challenge_path, challenge_raw)
+            write_atomic_bytes(attempts_path, attempts_raw)
         else:
             if not args.owned_only:
                 raise ValueError(
@@ -283,6 +290,8 @@ def main() -> int:
             artifact_dir = (
                 args.artifact_dir if args.artifact_dir is not None else args.output.parent
             ).resolve()
+            challenge_path = artifact_dir / "responses" / f"challenge-{args.challenge_id}.json"
+            attempts_path = artifact_dir / "responses" / f"attempts-{args.challenge_id}.json"
             challenge_payload, challenge_raw, attempts_payload, attempts_raw = _fetch(
                 args.challenge_id,
                 args.base_url,
@@ -298,7 +307,19 @@ def main() -> int:
             probe_at_ms=probe_at_ms,
         )
         write_atomic(args.output, probe)
-        print(json.dumps(probe, ensure_ascii=True, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    **probe,
+                    "evidence": {
+                        "challenge_response_path": str(challenge_path.resolve()),
+                        "attempts_response_path": str(attempts_path.resolve()),
+                    },
+                },
+                ensure_ascii=True,
+                sort_keys=True,
+            )
+        )
         return 0
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(

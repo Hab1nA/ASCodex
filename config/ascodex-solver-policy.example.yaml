@@ -5,6 +5,8 @@ channel:
   # Optional. Required when the trusted CLI is installed outside workspace_root.
   trusted_cli_root: C:/path/to/ascodex/workspace
   trusted_cli_sha256: 0000000000000000000000000000000000000000000000000000000000000000
+  # A pre-submit channel probe is a live fact. Omitting this field uses a 15-minute maximum.
+  channel_probe_max_age_ms: 900000
 identity:
   name: example-identity
   challenge_id: example-challenge

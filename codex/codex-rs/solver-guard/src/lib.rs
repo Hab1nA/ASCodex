@@ -260,6 +260,13 @@ pub struct ChannelPolicy {
     #[serde(default)]
     pub trusted_cli_root: Option<PathBuf>,
     pub trusted_cli_sha256: String,
+    /// A channel probe is a live fact, not a permanent campaign setting.
+    #[serde(default = "default_channel_probe_max_age_ms")]
+    pub channel_probe_max_age_ms: i64,
+}
+
+fn default_channel_probe_max_age_ms() -> i64 {
+    15 * 60 * 1000
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -323,6 +330,40 @@ pub struct TraceEvidence {
     pub real_execution: bool,
     pub paired_tool_events: bool,
     pub artifact_provenance: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChannelProbeEvidence {
+    pub schema_version: String,
+    pub challenge_id: String,
+    pub probe_at_ms: i64,
+    pub challenge_route: String,
+    pub attempts_route: String,
+    pub challenge_response_sha256: String,
+    pub attempts_response_sha256: Option<String>,
+    pub grader_name: Option<String>,
+    pub s2: Option<bool>,
+    pub grader_registered: Option<bool>,
+    pub harbor_active: Option<bool>,
+    pub observed_attempt_count: Option<u64>,
+    pub newest_attempt_updated_ms: Option<i64>,
+    pub worker_queue_ok: Option<bool>,
+    pub worker_queue_stale_after_ms: i64,
+    pub recent_attempt_limit: u32,
+    pub method: String,
+    pub platform_write_attempted: bool,
+    pub quota_cost: String,
+}
+
+#[derive(Debug, Error)]
+pub enum ChannelProbeValidationError {
+    #[error("channel probe evidence path is outside the assigned workspace: {0}")]
+    OutsideWorkspace(String),
+    #[error("channel probe evidence cannot be read: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("channel probe evidence is invalid: {0}")]
+    Invalid(String),
 }
 
 /// The execution block emitted by an ARM bundle. This is deliberately separate from the
@@ -586,6 +627,168 @@ pub fn validate_trace_evidence(
         paired_tool_events: true,
         artifact_provenance: true,
     })
+}
+
+fn canonical_channel_probe_path(
+    workspace: &Path,
+    supplied: &Path,
+) -> Result<PathBuf, ChannelProbeValidationError> {
+    let candidate = if supplied.is_absolute() {
+        supplied.to_path_buf()
+    } else {
+        workspace.join(supplied)
+    };
+    let canonical = candidate.canonicalize()?;
+    if !canonical.starts_with(workspace) || !canonical.is_file() {
+        return Err(ChannelProbeValidationError::OutsideWorkspace(
+            supplied.display().to_string(),
+        ));
+    }
+    Ok(canonical)
+}
+
+fn require_sha256(value: &str, label: &str) -> Result<(), ChannelProbeValidationError> {
+    if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(ChannelProbeValidationError::Invalid(format!(
+            "{label} is not a 64-character SHA-256"
+        )))
+    }
+}
+
+/// Validate a fresh, workspace-owned channel probe and bind it to both raw GET responses.
+/// Missing grader/queue facts do not become false negatives, but formal submission requires
+/// positive grader evidence. A stale or failed worker queue also blocks admission.
+pub fn validate_channel_probe_evidence(
+    workspace: &Path,
+    probe_path: &Path,
+    challenge_response_path: &Path,
+    attempts_response_path: &Path,
+    expected_challenge_id: &str,
+    now_ms: i64,
+    max_age_ms: i64,
+) -> Result<ChannelProbeEvidence, ChannelProbeValidationError> {
+    if expected_challenge_id.trim().is_empty() {
+        return Err(ChannelProbeValidationError::Invalid(
+            "expected challenge id is required".to_string(),
+        ));
+    }
+    if max_age_ms <= 0 {
+        return Err(ChannelProbeValidationError::Invalid(
+            "channel probe max age must be positive".to_string(),
+        ));
+    }
+    let workspace = workspace.canonicalize().map_err(|error| {
+        ChannelProbeValidationError::Invalid(format!("workspace cannot be resolved: {error}"))
+    })?;
+    let probe_path = canonical_channel_probe_path(&workspace, probe_path)?;
+    let challenge_response_path =
+        canonical_channel_probe_path(&workspace, challenge_response_path)?;
+    let attempts_response_path = canonical_channel_probe_path(&workspace, attempts_response_path)?;
+
+    let probe_text = std::fs::read_to_string(&probe_path)?;
+    if probe_text.len() > 1024 * 1024 {
+        return Err(ChannelProbeValidationError::Invalid(
+            "channel probe exceeds the 1 MiB admission limit".to_string(),
+        ));
+    }
+    let probe: ChannelProbeEvidence = serde_json::from_str(&probe_text).map_err(|error| {
+        ChannelProbeValidationError::Invalid(format!("typed probe JSON: {error}"))
+    })?;
+    require_sha256(&probe.challenge_response_sha256, "challenge response hash")?;
+    let attempts_hash = probe.attempts_response_sha256.as_deref().ok_or_else(|| {
+        ChannelProbeValidationError::Invalid(
+            "attempts response hash is required for formal admission".to_string(),
+        )
+    })?;
+    require_sha256(attempts_hash, "attempts response hash")?;
+
+    if probe.schema_version != "ascodex-channel-probe/v1"
+        || probe.challenge_id != expected_challenge_id
+        || probe.challenge_route != format!("/api/challenges/{expected_challenge_id}")
+        || probe.attempts_route != format!("/api/challenges/{expected_challenge_id}/attempts")
+        || probe.method != "GET"
+        || probe.platform_write_attempted
+        || probe.probe_at_ms < 0
+        || now_ms < 0
+        || probe.probe_at_ms > now_ms
+        || now_ms - probe.probe_at_ms > max_age_ms
+    {
+        return Err(ChannelProbeValidationError::Invalid(
+            "channel probe is unbound, not GET-only, stale, or future-dated".to_string(),
+        ));
+    }
+    let challenge_hash = sha256_file(&challenge_response_path)?;
+    if !challenge_hash.eq_ignore_ascii_case(&probe.challenge_response_sha256) {
+        return Err(ChannelProbeValidationError::Invalid(
+            "challenge response hash does not match the typed probe".to_string(),
+        ));
+    }
+    let attempts_hash_actual = sha256_file(&attempts_response_path)?;
+    if !attempts_hash_actual.eq_ignore_ascii_case(attempts_hash) {
+        return Err(ChannelProbeValidationError::Invalid(
+            "attempts response hash does not match the typed probe".to_string(),
+        ));
+    }
+    if probe.grader_registered != Some(true)
+        || probe.s2 != Some(false)
+        || probe.grader_name.as_deref().is_none_or(str::is_empty)
+    {
+        return Err(ChannelProbeValidationError::Invalid(
+            "positive grader registration evidence is required".to_string(),
+        ));
+    }
+    if probe.worker_queue_ok == Some(false) {
+        return Err(ChannelProbeValidationError::Invalid(
+            "worker queue is observed as stalled".to_string(),
+        ));
+    }
+
+    let challenge: JsonValue = serde_json::from_str(&std::fs::read_to_string(
+        &challenge_response_path,
+    )?)
+    .map_err(|error| {
+        ChannelProbeValidationError::Invalid(format!("challenge response JSON: {error}"))
+    })?;
+    let challenge_bound = ["challenge_id", "challengeId", "id"]
+        .iter()
+        .find_map(|key| challenge.get(key))
+        .and_then(JsonValue::as_str)
+        .is_some_and(|value| value == expected_challenge_id);
+    if !challenge_bound {
+        return Err(ChannelProbeValidationError::Invalid(
+            "challenge response is not bound to the requested challenge id".to_string(),
+        ));
+    }
+    let attempts: JsonValue = serde_json::from_str(&std::fs::read_to_string(
+        &attempts_response_path,
+    )?)
+    .map_err(|error| {
+        ChannelProbeValidationError::Invalid(format!("attempts response JSON: {error}"))
+    })?;
+    let attempt_entries = if attempts.is_array() {
+        attempts.as_array().unwrap().clone()
+    } else {
+        ["attempts", "items", "data", "results", "entries"]
+            .iter()
+            .find_map(|key| attempts.get(key).and_then(JsonValue::as_array))
+            .cloned()
+            .unwrap_or_default()
+    };
+    for entry in attempt_entries {
+        let bound = ["challenge_id", "challengeId"]
+            .iter()
+            .find_map(|key| entry.get(key))
+            .and_then(JsonValue::as_str);
+        if bound.is_some_and(|value| value != expected_challenge_id) {
+            return Err(ChannelProbeValidationError::Invalid(
+                "attempts response contains another challenge".to_string(),
+            ));
+        }
+    }
+
+    Ok(probe)
 }
 
 const BUILTIN_REDLINE_TERMS: &[&str] = &[
@@ -5191,6 +5394,7 @@ mod tests {
                 workspace_root: workspace.clone(),
                 trusted_cli_root: Some(cli_root),
                 trusted_cli_sha256: sha256_file(&trusted_cli).expect("hash"),
+                channel_probe_max_age_ms: 900_000,
             },
             identity: IdentityPolicy {
                 name: "id".to_string(),
@@ -5539,6 +5743,108 @@ mod tests {
             rpc_preflight("mcpServer/tool/call", true),
             RpcDecision::Block
         );
+    }
+
+    fn write_channel_probe_fixture(root: &Path) -> (PathBuf, PathBuf, PathBuf) {
+        let challenge_path = root.join("challenge.json");
+        let attempts_path = root.join("attempts.json");
+        let probe_path = root.join("channel-probe.json");
+        let challenge = serde_json::json!({"challengeId": "challenge-a"});
+        let attempts = serde_json::json!({
+            "attempts": [{"challengeId": "challenge-a", "harborReward": 0.9}]
+        });
+        std::fs::write(&challenge_path, challenge.to_string()).expect("challenge");
+        std::fs::write(&attempts_path, attempts.to_string()).expect("attempts");
+        let probe = serde_json::json!({
+            "schema_version": "ascodex-channel-probe/v1",
+            "challenge_id": "challenge-a",
+            "probe_at_ms": 900,
+            "challenge_route": "/api/challenges/challenge-a",
+            "attempts_route": "/api/challenges/challenge-a/attempts",
+            "challenge_response_sha256": sha256_file(&challenge_path).expect("challenge hash"),
+            "attempts_response_sha256": sha256_file(&attempts_path).expect("attempts hash"),
+            "grader_name": "harbor-grader",
+            "s2": false,
+            "grader_registered": true,
+            "harbor_active": true,
+            "observed_attempt_count": 1,
+            "newest_attempt_updated_ms": 800,
+            "worker_queue_ok": true,
+            "worker_queue_stale_after_ms": 10_800_000,
+            "recent_attempt_limit": 30,
+            "method": "GET",
+            "platform_write_attempted": false,
+            "quota_cost": "unknown"
+        });
+        std::fs::write(&probe_path, probe.to_string()).expect("probe");
+        (probe_path, challenge_path, attempts_path)
+    }
+
+    #[test]
+    fn channel_probe_evidence_is_bound_fresh_and_positive() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        let (probe, challenge, attempts) = write_channel_probe_fixture(root);
+        validate_channel_probe_evidence(
+            root,
+            &probe,
+            &challenge,
+            &attempts,
+            "challenge-a",
+            1_000,
+            900_000,
+        )
+        .expect("fresh positive probe");
+
+        let error = validate_channel_probe_evidence(
+            root,
+            &probe,
+            &challenge,
+            &attempts,
+            "challenge-a",
+            900 + 900_001,
+            900_000,
+        )
+        .expect_err("stale probe must fail closed");
+        assert!(error.to_string().contains("stale"));
+    }
+
+    #[test]
+    fn channel_probe_requires_positive_grader_and_matching_responses() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        let (probe, challenge, attempts) = write_channel_probe_fixture(root);
+        let mut unknown =
+            serde_json::from_str::<JsonValue>(&std::fs::read_to_string(&probe).expect("probe"))
+                .expect("probe JSON");
+        unknown["grader_name"] = serde_json::Value::Null;
+        unknown["s2"] = serde_json::Value::Null;
+        unknown["grader_registered"] = serde_json::Value::Null;
+        std::fs::write(&probe, unknown.to_string()).expect("unknown probe");
+        let error = validate_channel_probe_evidence(
+            root,
+            &probe,
+            &challenge,
+            &attempts,
+            "challenge-a",
+            1_000,
+            900_000,
+        )
+        .expect_err("unknown grader must not become false or pass");
+        assert!(error.to_string().contains("positive grader"));
+
+        std::fs::write(&attempts, "{\"attempts\":[]}").expect("changed attempts");
+        let error = validate_channel_probe_evidence(
+            root,
+            &probe,
+            &challenge,
+            &attempts,
+            "challenge-a",
+            1_000,
+            900_000,
+        )
+        .expect_err("changed raw response must fail closed");
+        assert!(error.to_string().contains("attempts response hash"));
     }
 
     #[test]

@@ -39,6 +39,9 @@ struct SolverGuardSubmitArgs {
     run_log_path: String,
     artifact_manifest_path: String,
     execution_manifest_path: String,
+    channel_probe_path: String,
+    channel_challenge_response_path: String,
+    channel_attempts_response_path: String,
     provider: String,
     model: String,
     content_sha256: String,
@@ -103,6 +106,15 @@ impl ToolExecutor<ToolInvocation> for SolverGuardSubmitHandler {
                 "execution_manifest_path".to_string(),
                 JsonSchema::string(None),
             ),
+            ("channel_probe_path".to_string(), JsonSchema::string(None)),
+            (
+                "channel_challenge_response_path".to_string(),
+                JsonSchema::string(None),
+            ),
+            (
+                "channel_attempts_response_path".to_string(),
+                JsonSchema::string(None),
+            ),
             ("provider".to_string(), JsonSchema::string(None)),
             ("model".to_string(), JsonSchema::string(None)),
             ("content_sha256".to_string(), JsonSchema::string(None)),
@@ -135,6 +147,9 @@ impl ToolExecutor<ToolInvocation> for SolverGuardSubmitHandler {
                     "run_log_path".to_string(),
                     "artifact_manifest_path".to_string(),
                     "execution_manifest_path".to_string(),
+                    "channel_probe_path".to_string(),
+                    "channel_challenge_response_path".to_string(),
+                    "channel_attempts_response_path".to_string(),
                     "provider".to_string(),
                     "model".to_string(),
                     "content_sha256".to_string(),
@@ -301,6 +316,22 @@ impl SolverGuardSubmitHandler {
                 "dry_run": true,
                 "reason": "submission artifacts contain platform-feedback or external-solver references",
                 "redline_findings": redline_findings,
+            });
+        }
+        if let Err(err) = codex_solver_guard::validate_channel_probe_evidence(
+            workspace,
+            Path::new(&args.channel_probe_path),
+            Path::new(&args.channel_challenge_response_path),
+            Path::new(&args.channel_attempts_response_path),
+            &args.challenge_id,
+            now_ms,
+            policy.channel.channel_probe_max_age_ms,
+        ) {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": format!("channel probe validation failed: {err}"),
             });
         }
         let request = codex_solver_guard::AdmissionRequest {
