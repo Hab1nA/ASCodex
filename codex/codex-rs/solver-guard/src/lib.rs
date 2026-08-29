@@ -244,6 +244,10 @@ impl Admission {
 pub struct Policy {
     pub channel: ChannelPolicy,
     pub identity: IdentityPolicy,
+    /// When non-empty, this typed pool is authoritative.  The single-identity policy remains
+    /// only as a migration-compatible fallback for older local policies.
+    #[serde(default)]
+    pub identity_pool: Vec<IdentityPoolEntry>,
     pub cadence: CadencePolicy,
     pub redline: RedlinePolicy,
     pub trace: TracePolicy,
@@ -275,6 +279,17 @@ pub struct IdentityPolicy {
     pub name: String,
     pub challenge_id: String,
     pub owner: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IdentityPoolEntry {
+    pub name: String,
+    pub challenge_id: String,
+    pub owner: String,
+    pub identity_class: String,
+    #[serde(default)]
+    pub frozen: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -313,6 +328,7 @@ pub struct ModelPolicy {
 pub struct AdmissionRequest<'a> {
     pub channel: &'a str,
     pub identity: &'a str,
+    pub identity_class: &'a str,
     pub challenge_id: &'a str,
     pub owner: &'a str,
     pub cli_path: &'a Path,
@@ -1254,7 +1270,27 @@ impl Policy {
                 "submission channel is not the verified Harbor route",
             );
         }
-        if request.identity != self.identity.name
+        if !self.identity_pool.is_empty() {
+            let matches: Vec<&IdentityPoolEntry> = self
+                .identity_pool
+                .iter()
+                .filter(|entry| {
+                    entry.name == request.identity
+                        && entry.challenge_id == request.challenge_id
+                        && entry.owner == request.owner
+                        && entry.identity_class == request.identity_class
+                })
+                .collect();
+            if matches.len() != 1 {
+                return Admission::denied(
+                    Gate::Identity,
+                    "identity, challenge, owner, and identity class have no unique pool binding",
+                );
+            }
+            if matches[0].frozen {
+                return Admission::denied(Gate::Identity, "identity is frozen");
+            }
+        } else if request.identity != self.identity.name
             || request.challenge_id != self.identity.challenge_id
             || request.owner != self.identity.owner
         {
@@ -5361,6 +5397,7 @@ mod tests {
         let request = AdmissionRequest {
             channel: "harbor",
             identity: "id-a",
+            identity_class: "solver-primary",
             challenge_id: "challenge-a",
             owner: "chief",
             cli_path: Path::new("C:/missing/cli"),
@@ -5401,6 +5438,7 @@ mod tests {
                 challenge_id: "challenge".to_string(),
                 owner: "owner".to_string(),
             },
+            identity_pool: Vec::new(),
             cadence: CadencePolicy {
                 min_interval_seconds: 0,
                 max_estimated_cost_usd: 1.0,
@@ -5422,6 +5460,7 @@ mod tests {
         let request = AdmissionRequest {
             channel: "harbor",
             identity: "id",
+            identity_class: "solver-primary",
             challenge_id: "challenge",
             owner: "owner",
             cli_path: &trusted_cli,
@@ -5445,6 +5484,86 @@ mod tests {
             ..request
         };
         assert!(!policy.admit(&outside_request).allowed);
+    }
+
+    #[test]
+    fn identity_pool_requires_unique_unfrozen_class_binding() {
+        let dir = tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        let trusted_cli = workspace.join("bohr.exe");
+        std::fs::write(&trusted_cli, b"trusted").expect("cli");
+        let yaml = format!(
+            r#"
+channel:
+  harbor_only: true
+  workspace_root: {}
+  trusted_cli_sha256: {}
+identity:
+  name: legacy-id
+  challenge_id: challenge-a
+  owner: owner-a
+identity_pool:
+  - name: id-a
+    challenge_id: challenge-a
+    owner: owner-a
+    identity_class: solver-primary
+    frozen: false
+  - name: id-b
+    challenge_id: challenge-a
+    owner: owner-a
+    identity_class: solver-primary
+    frozen: true
+cadence:
+  min_interval_seconds: 0
+  max_estimated_cost_usd: 1.0
+redline:
+  clean: true
+trace:
+  real_execution: true
+  paired_tool_events: true
+  artifact_provenance: true
+model:
+  provider: provider
+  model: model
+"#,
+            workspace.display(),
+            sha256_file(&trusted_cli).expect("hash")
+        );
+        let policy = Policy::from_yaml(&yaml).expect("policy parses");
+        let request = AdmissionRequest {
+            channel: "harbor",
+            identity: "id-a",
+            identity_class: "solver-primary",
+            challenge_id: "challenge-a",
+            owner: "owner-a",
+            cli_path: &trusted_cli,
+            workspace: &workspace,
+            estimated_cost_usd: 0.1,
+            trace: TraceEvidence {
+                real_execution: true,
+                paired_tool_events: true,
+                artifact_provenance: true,
+            },
+            provider: "provider",
+            model: "model",
+            content_sha256: "content-a",
+            now_ms: 100,
+        };
+        let admission = policy.admit(&request);
+        assert!(admission.allowed, "failures: {:?}", admission.failures);
+
+        let frozen = AdmissionRequest {
+            identity: "id-b",
+            ..request
+        };
+        assert!(!policy.admit(&frozen).allowed);
+
+        let wrong_class = AdmissionRequest {
+            identity_class: "solver-other",
+            ..request
+        };
+        assert!(!policy.admit(&wrong_class).allowed);
     }
 
     #[test]
@@ -6003,6 +6122,7 @@ mod tests {
         let request = AdmissionRequest {
             channel: "wrong-channel",
             identity: "id-a",
+            identity_class: "solver-primary",
             challenge_id: "challenge-a",
             owner: "chief",
             cli_path: Path::new("C:/missing/cli"),

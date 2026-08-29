@@ -362,6 +362,7 @@ impl SolverGuardSubmitHandler {
         let request = codex_solver_guard::AdmissionRequest {
             channel: &args.channel,
             identity: &args.identity,
+            identity_class: &args.identity_class,
             challenge_id: &args.challenge_id,
             owner: &args.owner,
             cli_path: Path::new(&args.cli_path),
