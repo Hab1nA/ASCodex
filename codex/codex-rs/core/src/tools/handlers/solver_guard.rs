@@ -251,6 +251,19 @@ impl SolverGuardSubmitHandler {
                 });
             }
         };
+        if let Err(err) = validate_submission_contract_files(
+            &std::env::var("ASCODEX_CONTRACT_FILE").unwrap_or_default(),
+            &std::env::var("ASCODEX_CONTRACT_INPUT_FILE").unwrap_or_default(),
+            &args.challenge_id,
+            now_ms,
+        ) {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": format!("contract gate blocked: {err}"),
+            });
+        }
         let workspace = Path::new(&args.workspace);
         let trace = match codex_solver_guard::validate_trace_evidence(
             workspace,
@@ -449,4 +462,130 @@ impl SolverGuardSubmitHandler {
     }
 }
 
+fn validate_submission_contract_files(
+    contract_file: &str,
+    fingerprint_input_file: &str,
+    expected_challenge_id: &str,
+    now_ms: i64,
+) -> Result<(), String> {
+    if contract_file.trim().is_empty() || fingerprint_input_file.trim().is_empty() {
+        return Err(
+            "ASCODEX_CONTRACT_FILE and ASCODEX_CONTRACT_INPUT_FILE are required".to_string(),
+        );
+    }
+    for (name, path) in [
+        ("ASCODEX_CONTRACT_FILE", contract_file),
+        ("ASCODEX_CONTRACT_INPUT_FILE", fingerprint_input_file),
+    ] {
+        if !Path::new(path).is_absolute() {
+            return Err(format!("{name} must be an absolute path"));
+        }
+    }
+    let contract_bytes = std::fs::read(contract_file)
+        .map_err(|error| format!("cannot read typed ChallengeContract: {error}"))?;
+    if contract_bytes.len() > 256 * 1024 {
+        return Err("typed ChallengeContract exceeds 256 KiB".to_string());
+    }
+    let contract: codex_ascodex_coordination::ChallengeContract =
+        serde_json::from_slice(&contract_bytes)
+            .map_err(|error| format!("invalid typed ChallengeContract: {error}"))?;
+    if contract.challenge_id != expected_challenge_id {
+        return Err(format!(
+            "contract challenge `{}` does not match submission challenge `{expected_challenge_id}`",
+            contract.challenge_id
+        ));
+    }
+    let fingerprint_input = std::fs::read(fingerprint_input_file)
+        .map_err(|error| format!("cannot read canonical fingerprint input: {error}"))?;
+    if fingerprint_input.len() > 1024 * 1024 {
+        return Err("canonical fingerprint input exceeds 1 MiB".to_string());
+    }
+    contract
+        .verify_fingerprint_input(&fingerprint_input)
+        .map_err(|error| error.to_string())?;
+    contract
+        .formal_admission(expected_challenge_id, now_ms)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 impl CoreToolRuntime for SolverGuardSubmitHandler {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+    use tempfile::tempdir;
+
+    #[test]
+    fn submission_contract_requires_absolute_paths() {
+        let error = validate_submission_contract_files(
+            "relative-contract.json",
+            "/absolute-input.json",
+            "challenge-a",
+            300,
+        )
+        .expect_err("relative contract path must fail closed");
+        assert!(error.contains("absolute path"));
+    }
+
+    #[test]
+    fn submission_contract_binds_fingerprint_and_requires_known_status() {
+        let dir = tempdir().expect("tempdir");
+        let contract_path = dir.path().join("contract.json");
+        let input_path = dir.path().join("fingerprint-input.json");
+        let fingerprint_input =
+            br#"{"challenge_id":"challenge-a","contract_version":"v1","required_submission":"arm"}"#;
+        std::fs::write(&input_path, fingerprint_input).expect("write input");
+        let digest = Sha256::digest(fingerprint_input);
+        let fingerprint = digest[..8]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+
+        let make_contract = |status: &str, adapter: Option<&str>| {
+            let contract = serde_json::json!({
+                "schema_version": "ascodex-coordination/v1",
+                "challenge_id": "challenge-a",
+                "contract_version": "v1",
+                "fingerprint": fingerprint,
+                "required_submission": "arm",
+                "status": status,
+                "adapter_id": adapter,
+                "round_start_ms": 100,
+                "round_end_ms": 999,
+            });
+            std::fs::write(&contract_path, contract.to_string()).expect("write contract");
+        };
+
+        make_contract("known", Some("adapter-v1"));
+        validate_submission_contract_files(
+            contract_path.to_str().expect("utf-8 path"),
+            input_path.to_str().expect("utf-8 path"),
+            "challenge-a",
+            300,
+        )
+        .expect("known bound contract passes");
+
+        make_contract("unknown", None);
+        let error = validate_submission_contract_files(
+            contract_path.to_str().expect("utf-8 path"),
+            input_path.to_str().expect("utf-8 path"),
+            "challenge-a",
+            300,
+        )
+        .expect_err("unknown contract cannot admit formal submission");
+        assert!(error.contains("formal admission"));
+
+        std::fs::write(&input_path, b"changed").expect("tamper input");
+        make_contract("known", Some("adapter-v1"));
+        let error = validate_submission_contract_files(
+            contract_path.to_str().expect("utf-8 path"),
+            input_path.to_str().expect("utf-8 path"),
+            "challenge-a",
+            300,
+        )
+        .expect_err("fingerprint mismatch must fail closed");
+        assert!(error.contains("fingerprint"));
+    }
+}
