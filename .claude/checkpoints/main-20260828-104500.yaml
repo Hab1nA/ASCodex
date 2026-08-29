@@ -1,0 +1,73 @@
+checkpoint_version: '3.0.0'
+created_at: 2026-08-28T10:45:00+08:00
+branch: main
+
+phase:
+  current: ascodex_coordination_hardening_complete
+  completed:
+    - external_solver_guard_final_readonly_baseline
+    - recovery_canary_persistence_and_resume_gate
+    - explicit_policy_and_challenge_workspace_roots
+    - pre_submit_real_trace_route
+    - completed_cycle_official_observation_gate
+    - closure_evidence_hardening
+    - stuck_detection_evidence_hardening
+  next:
+    - real_disposable_canary_runner
+    - typed_platform_reconciliation
+    - controlled_solver_guard_executor
+
+state:
+  external_baseline:
+    source: C:\\Users\\XKZ\\dsh-plugins\\dsh-solver-guard
+    file_count: 77
+    manifest: config/baselines/dsh-solver-guard-final-2026-08-28.sha256.json
+    access: read_only
+  implementation:
+    coordination: codex/codex-rs/ascodex-coordination
+    runtime: codex/codex-rs/ascodex-runtime
+    guard: codex/codex-rs/solver-guard
+    core_resume_gate: codex/codex-rs/core/src/agent/control/spawn.rs
+    app_server_resume_gate: codex/codex-rs/app-server/src/request_processors/thread_processor.rs
+
+decisions:
+  - question: 'How should signed skills and worker writes be rooted?'
+    decision: 'Separate policy_root from challenge_workspace_root.'
+    rationale: 'A single root either breaks skill lookup or grants Solver repository-wide write access.'
+  - question: 'Can a Completed cycle rely on a queued/submitted status?'
+    decision: 'No; require successful WorkerReport, matching attempt, complete PlatformObservation and typed observation evidence.'
+    rationale: 'round3_prep explicitly rejects transport acceptance as success.'
+  - question: 'Should the external solver-guard still be followed live?'
+    decision: 'No; freeze the 77-file read-only hash baseline and only absorb stable design concepts.'
+    rationale: 'User designated the current external state as final and asked not to interfere with its work.'
+
+validation:
+  - command: 'python -m pytest -q'
+    result: '27 passed'
+  - command: 'cargo test -p codex-ascodex-coordination -p codex-ascodex-runtime -p codex-solver-guard --locked --offline'
+    result: '47 + 4 + 33 passed'
+  - command: 'cargo check -p codex-core -p codex-app-server --locked --offline'
+    result: 'passed after ChallengeContract and workspace ACL integration'
+  - command: 'cargo fmt --package codex-ascodex-coordination --package codex-ascodex-runtime --package codex-solver-guard'
+    result: 'applied; stable toolchain emits existing nightly imports_granularity warnings'
+
+blockers:
+  - '真实 solver_guard_submit executor、OS egress、平台 reconciliation、真实网络动态 contract validator 与自动 recovery canary runner 尚未实现。'
+  - '完整 cargo fmt --all -- --check 仍受仓库既有 nightly-only rustfmt 配置影响；目标包已格式化。'
+
+artifacts:
+  - path: config/baselines/dsh-solver-guard-final-2026-08-28.sha256.json
+    role: frozen external plugin audit baseline
+  - path: codex/codex-rs/ascodex-coordination/src/recovery_canary.rs
+    role: recovery lifecycle contract
+  - path: codex/codex-rs/ascodex-runtime/src/lib.rs
+    role: policy/challenge root verification and ACL derivation
+  - path: codex/codex-rs/solver-guard/src/lib.rs
+    role: durable canary ledger and Guard tests
+
+resume_instructions: |
+  1. Re-read config/ascodex-coordination-architecture.md and bohrium-kb/round3_prep/OPERATIONS_PLAYBOOK.md.
+  2. Keep C:\\Users\\XKZ\\Documents\\VSCode Projects\\ASCLocal and DeepSeek Harness read-only.
+  3. Implement dynamic challenge contract binding as a typed coordination object before any write executor.
+  4. Implement a Core-owned disposable two-turn canary runner; do not expose it as a model tool.
+  5. Re-run the listed offline tests and remove codex/codex-rs/target after verification.

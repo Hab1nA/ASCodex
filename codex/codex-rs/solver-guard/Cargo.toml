@@ -1,0 +1,40 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-solver-guard"
+version.workspace = true
+
+[lib]
+name = "codex_solver_guard"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ascodex-lease-admin"
+path = "src/bin/lease_admin.rs"
+
+[[bin]]
+name = "ascodex-stage-admin"
+path = "src/bin/stage_admin.rs"
+
+[[bin]]
+name = "ascodex-observation-admin"
+path = "src/bin/observation_admin.rs"
+
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+codex-ascodex-coordination = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

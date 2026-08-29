@@ -1,0 +1,33 @@
+# Secrets and local runtime state
+**/*credentials*
+**/.credentials.yaml
+**/*.pem
+**/*.key
+**/.env
+**/.env.*
+config/*local*
+
+# Large/generated challenge artifacts
+_logs/
+_research/
+_artifacts/
+scratch/
+**/__pycache__/
+.pytest_cache/
+*.pytest_cache
+*.pyc
+codex/codex-rs/target*/
+*.zip
+*.npy
+*.npz
+*.h5
+*.h5ad
+*.tar
+*.tar.gz
+*.tgz
+
+# Harness runtime exports that must remain inert references
+**/sessions/
+**/attachments/
+**/storages/
+**/undo-snapshots/

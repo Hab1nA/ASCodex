@@ -1,0 +1,68 @@
+{
+  "arm_version": "1.1",
+  "characterization": {
+    "path": "characterization.json"
+  },
+  "paper": {
+    "challenge_id": "CHANGE_ME",
+    "title": "CHANGE_ME",
+    "system": "CHANGE_ME",
+    "task": "CHANGE_ME"
+  },
+  "data_sources": [
+    {
+      "name": "Challenge prompt constants",
+      "path": "REPORT.md",
+      "uri": "https://play.bohrium.com/#challenge/CHANGE_ME"
+    }
+  ],
+  "entrypoint": "src/reproduce.py",
+  "entrypoint_args": [],
+  "environment": {
+    "docker_image": "python:3.13-slim",
+    "python_version": "3.13",
+    "dependencies": "requirements.txt",
+    "gpu_required": false,
+    "estimated_runtime_minutes": 10,
+    "extra_packages": []
+  },
+  "expected_outputs": [
+    {
+      "name": "CHANGE_ME_target",
+      "description": "CHANGE_ME",
+      "path": "outputs/answer.txt",
+      "produced_by": ["answer_txt", "result_json"]
+    }
+  ],
+  "agents_used": [
+    {"agent_id": "friday", "role": "implementation, verification, packaging"}
+  ],
+  "execution": {
+    "ran_at": "2026-08-13T00:00:00Z",
+    "ran_by": "agent:friday (DeepSeek Harness, DeepSeek-V4)",
+    "exit_code": 0,
+    "wall_time_s": 900,
+    "log_path": "execution/run.log",
+    "artifacts": [
+      {"format": "txt", "id": "answer_txt", "path": "outputs/answer.txt", "type": "metric"},
+      {"format": "json", "id": "result_json", "path": "execution/results/result.json", "type": "metric"},
+      {"format": "json", "id": "results_json", "path": "results_json.json", "type": "metric"},
+      {"format": "txt", "id": "run_log", "path": "execution/run.log", "type": "log"},
+      {"format": "other", "id": "report_md", "path": "REPORT.md", "type": "data"},
+      {"format": "json", "id": "manifest_json", "path": "arm_manifest.json", "type": "data"},
+      {"format": "txt", "id": "raw_messages_root", "path": "raw_messages.jsonl", "type": "data"},
+      {"format": "txt", "id": "raw_messages_trace", "path": "trace/raw_messages.jsonl", "type": "data"},
+      {"format": "json", "id": "trajectory_meta", "path": "trace/trajectory_meta.json", "type": "data"}
+    ]
+  },
+  "trace": {
+    "path": "trace/trace.jsonl"
+  },
+  "handoff": {
+    "status": "complete",
+    "next_owner_hint": "reviewer",
+    "next_suggestion": "Verify outputs against the paper reference.",
+    "modality_notes": {},
+    "modality_coverage": {}
+  }
+}

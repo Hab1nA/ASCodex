@@ -1,0 +1,145 @@
+START 2026-08-21 17:00:36
+CREATED archive skeleton + scratch
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\twisting-dmrg -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\twisting-dmrg
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\ppt-4x4 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\ppt-4x4
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\ultrasound -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\ultrasound
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\solving-heterogeneous-agent-models-with-deepham-18a5adeb -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\solving-heterogeneous-agent-models-with-deepham-18a5adeb
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\flowforge-open-model-selection-flow-v5-a9464888 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\flowforge-open-model-selection-flow-v5-a9464888
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\mp-r-ab-uv-split-coann-6924985d -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\mp-r-ab-uv-split-coann-6924985d
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\reasoning-gate-separable-covariance-1fe5635b -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\reasoning-gate-separable-covariance-1fe5635b
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\multi-sample-cnv-detection-from-binned-read-counts-15924b97 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\multi-sample-cnv-detection-from-binned-read-counts-15924b97
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\mp-r-mp-r-a-uv-portal-a5be12b2 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\mp-r-mp-r-a-uv-portal-a5be12b2
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\reasoning-gate-gbsde-feynman-kac-e8970329 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\reasoning-gate-gbsde-feynman-kac-e8970329
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\2fe-2s-sparse-ci-variational-energy-minimization-2bf4e3d5 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\2fe-2s-sparse-ci-variational-energy-minimization-2bf4e3d5
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\3d-refractive-index-reconstruction-with-non-paraxi-d8d9babd -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\3d-refractive-index-reconstruction-with-non-paraxi-d8d9babd
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\muon-edge-reconstruction-sharp-material-boundaries-9839145f -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\muon-edge-reconstruction-sharp-material-boundaries-9839145f
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\spin-3-2-entanglement-power-and-zero-entanglement-f37e43b7 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\spin-3-2-entanglement-power-and-zero-entanglement-f37e43b7
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\stationary-huggett-equilibrium-with-a-finite-diffe-dda9aff2 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\stationary-huggett-equilibrium-with-a-finite-diffe-dda9aff2
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\s3-01 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\s3-01
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\jarvis-mp-r-ab-uv-split-coann-6924985d -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\collab\jarvis-mp-r-ab-uv-split-coann-6924985d
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\flowforge-open-model-selection-flow-v5-a9464888-jarvis -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\collab\flowforge-open-model-selection-flow-v5-a9464888-jarvis
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\ultron-deepham -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\collab\ultron-deepham
+END_WORK_MOVES 17:00:36
+START_BATCH2 2026-08-21 17:01:01
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\race -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\historical\race
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\deepham_research -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\historical\deepham_research
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\dsh-plugin-research -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\historical\dsh-plugin-research
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_archive -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\historical\_archive
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\manual_bundle -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\historical\manual_bundle
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\auu6_search -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\historical\auu6_search
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\23200607_log -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\job-logs\23200607_log
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\23225788_log -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\job-logs\23225788_log
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\23225896_log -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\job-logs\23225896_log
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\23228405_log -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\job-logs\23228405_log
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\23228699_log -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\job-logs\23228699_log
+DELETED_DUP C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\muon-public-data.zip (identical to kb copy)
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\muon-data -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\misc\muon-data
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\playground-arm.zip -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_artifacts\playground-arm-20260821.zip
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\outputs -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\outputs
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\config.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\creds\config.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\euler_paper.pdf -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\papers\euler_paper.pdf
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\euler_paper.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\papers\euler_paper.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\arm_protocol.md -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\docs\arm_protocol.md
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\figure_manifest.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\two-phase-gold\figure_manifest.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bulk_download.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\bulk_download.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_scores.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\_scores.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\mach.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\mach.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\log.lammps -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\log.lammps
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\10 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\10
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\candidate_full.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\candidate_full.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\challenges_compact_p2.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\challenges_compact_p2.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\challenges_compact.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\challenges_compact.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\challenges_full_20260818.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\challenges_full_20260818.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\challenges_list.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\challenges_list.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\challenges_raw.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\challenges_raw.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\decision_table.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\decision_table.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\decision_table.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\decision_table.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\dump_candidate.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\dump_candidate.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\extract_input.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\extract_input.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\fetch_new_challenges.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\fetch_new_challenges.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\hackathon_ids_20260818.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\hackathon_ids_20260818.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\judge_card.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\judge_card.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\my_attempts.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\my_attempts.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\new_s4_challenges.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\new_s4_challenges.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\protocol.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\protocol.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\scan_challenges.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\scan_challenges.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\scan_hackathon.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\scan_hackathon.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\show_manifest_schema.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\show_manifest_schema.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\show_modalities.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\show_modalities.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\show_protocol.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\show_protocol.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\test_gate.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\bohrium-kb\tools\work-index\test_gate.py
+END_BATCH2 17:01:02
+START_BATCH3 2026-08-21 17:01:50
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\app.js -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\app.js
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\arxiv1.xml -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\arxiv1.xml
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\au_paper.html -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\au_paper.html
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\au_paper.pdf -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\au_paper.pdf
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\au2021.html -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\au2021.html
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\play_home.html -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\play_home.html
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\prep2021_81.pdf -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\prep2021_81.pdf
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\prep2021_81.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\prep2021_81.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\prep2021_81b.pdf -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\prep2021_81b.pdf
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\profile.js -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\profile.js
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\unpaywall.json -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\unpaywall.json
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\weck.html -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\weck.html
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\weck2020.pdf -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\weck2020.pdf
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\x_extract.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\x_extract.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\x_extract2.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\x_extract2.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\x_extract3.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\x_extract3.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\x_extract4.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\x_extract4.py
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\x_repair.py -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_research\from-logs\x_repair.py
+REMOVED_EMPTY C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\misc\work-index
+END_BATCH3 17:01:50
+START_BATCH4 2026-08-21 17:28:35 treat remaining work/ challenges as finished
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\two-phase-gold -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\two-phase-gold
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\convergence-and-efficiency-of-two-phase-and-shock-3b75bda5 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\convergence-and-efficiency-of-two-phase-and-shock-3b75bda5
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\kmc-poi -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\kmc-poi
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\liSi-dft -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\liSi-dft
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\wake-dg-fit -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\wake-dg-fit
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\lax-wendroff-gravity-0877e096 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\lax-wendroff-gravity-0877e096
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\round4-test -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\round4-test
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\round5-recon -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\round5-recon
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\s4-test-attack -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\s4-test-attack
+END_BATCH4 2026-08-21 17:28:35 moved=9 conflicts=0
+START_BATCH5 2026-08-22 21:39:37 archive S4 Round-4 combat zones + root scatter
+FAIL     C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4 :: You do not have sufficient access rights to perform this operation or the item is hidden, system, or read only.
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\ox-alpha-round4 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\ox-alpha-round4
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\jarvis-round4 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\jarvis-round4
+MERGED   C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\__pycache__ -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\__pycache__
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\_template -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\_template
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\biomaster-cnvkit-processed-segmentation-d6077a43 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\biomaster-cnvkit-processed-segmentation-d6077a43
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\closed-resource-mp-r-reconstruction-open-eft-dossi-ca1c49cf -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\closed-resource-mp-r-reconstruction-open-eft-dossi-ca1c49cf
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\closed-resource-mp-r-reconstruction-open-eft-multi-22502ae6 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\closed-resource-mp-r-reconstruction-open-eft-multi-22502ae6
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\closed-resource-mp-r-reconstruction-split-coannihi-783dc3ba -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\closed-resource-mp-r-reconstruction-split-coannihi-783dc3ba
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\denoise-a-frozen-pancreas-indrop1-single-cell-rna-e673f74c -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\denoise-a-frozen-pancreas-indrop1-single-cell-rna-e673f74c
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\design-a-compact-orthogonality-preserving-flow-ans-f540d0ad -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\design-a-compact-orthogonality-preserving-flow-ans-f540d0ad
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\find-a-discretized-step-function-upper-bound-for-t-1c09cf97 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\find-a-discretized-step-function-upper-bound-for-t-1c09cf97
+FAIL      :: The process cannot access the file because it is being used by another process.
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\flowforge-matchgate-swap-inverse-synthesis-v2-4019e745 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\flowforge-matchgate-swap-inverse-synthesis-v2-4019e745
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\flowforge-paired-block-boundary-projection-v10-fe06025a -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\flowforge-paired-block-boundary-projection-v10-fe06025a
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\flowforge-periodic-regular-tetrahedra-packing-f45cec7b -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\flowforge-periodic-regular-tetrahedra-packing-f45cec7b
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\flowforge-usct-ring-sound-speed-attenuation-v2-5c9021cd -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\flowforge-usct-ring-sound-speed-attenuation-v2-5c9021cd
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\reconcile-phase-and-quasiparticle-claims-about-the-d4b3ce36 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\reconcile-phase-and-quasiparticle-claims-about-the-d4b3ce36
+ROBOCOPY C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\APNS -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\APNS exit=  ------------------------------------------------------------------------------                 Total    Copied   Skipped  Mismatch    FAILED    Extras     Dirs :        17        16         1         0         0         0    Files :        45        45         0         0         0         0    Bytes :   226.9 k   226.9 k         0         0         0         0    Times :   0:00:00   0:00:00                       0:00:00   0:00:00      Speed :           5,809,425 Bytes/sec.    Speed :             332.418 MegaBytes/min.    Ended : 2026年8月22日 21:41:36  1
+ROBOCOPY C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\csw_src -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\csw_src exit=  ------------------------------------------------------------------------------                 Total    Copied   Skipped  Mismatch    FAILED    Extras     Dirs :         3         2         1         0         0         0    Files :        21        21         0         0         0         0    Bytes :    2.63 m    2.63 m         0         0         0         0    Times :   0:00:00   0:00:00                       0:00:00   0:00:00      Speed :           102,188,407 Bytes/sec.    Speed :             5,847.268 MegaBytes/min.    Ended : 2026年8月22日 21:41:37  1
+ROBOCOPY C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\PP_Collection -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\PP_Collection exit=  ------------------------------------------------------------------------------                 Total    Copied   Skipped  Mismatch    FAILED    Extras     Dirs :        26        25         1         0         0         0    Files :        69        69         0         0         0         0    Bytes :   10.26 m   10.26 m         0         0         0         0    Times :   0:00:00   0:00:00                       0:00:00   0:00:00      Speed :           182,484,406 Bytes/sec.    Speed :            10,441.842 MegaBytes/min.    Ended : 2026年8月22日 21:41:37  1
+ROBOCOPY C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\ABACUS-CSW-NAO -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\abacus-fractional-charge-nao-basis-a8033ccd\_logs\ABACUS-CSW-NAO exit=  ------------------------------------------------------------------------------                 Total    Copied   Skipped  Mismatch    FAILED    Extras     Dirs :        62        60         2         0         0         5    Files :       324       324         0         0         0        11    Bytes :  102.45 m  102.45 m         0         0         0    91.0 k    Times :   0:00:00   0:00:00                       0:00:00   0:00:00      Speed :           255,186,427 Bytes/sec.    Speed :            14,601.885 MegaBytes/min.    Ended : 2026年8月22日 21:41:37  3
+ROBOCOPY C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\flowforge-deep-bsde-pde-c8d415de -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\archive\challenges\friday-round4\flowforge-deep-bsde-pde-c8d415de exit=  ------------------------------------------------------------------------------                 Total    Copied   Skipped  Mismatch    FAILED    Extras     Dirs :        94        93         1         0         0         0    Files :       459       459         0         0         0         0    Bytes :    2.25 m    2.25 m         0         0         0         0    Times :   0:00:00   0:00:00                       0:00:00   0:00:00      Speed :           5,432,782 Bytes/sec.    Speed :             310.866 MegaBytes/min.    Ended : 2026年8月22日 21:41:38   2026/08/22 21:41:38 ERROR 32 (0x00000020) Deleting Source Directory C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\flowforge-deep-bsde-pde-c8d415de\ The process cannot access the file because it is being used by another process.  1
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\work\friday-round4\flowforge-deep-bsde-pde-c8d415de -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\_locked-friday-bsde-empty  (empty leftover, file lock)
+MOVED_JOBLOGS count=61 fail=0 -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\job-logs
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs_bsde\23233809_log -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs\job-logs\23233809_log
+REMOVED_EMPTY  C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_logs_bsde
+REMOVED_EMPTY  C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\backup_best
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\playground-arm-bt.zip -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_artifacts\playground-arm-bt.zip
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\playground-arm-wt120.zip -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_artifacts\playground-arm-wt120.zip
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\playground-arm-wt300.zip -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_artifacts\playground-arm-wt300.zip
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\playground-arm.zip -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\_artifacts\playground-arm-20260822.zip
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\desc_final.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\desc_final.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\desc_v1.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\desc_v1.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\desc4.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\desc4.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\describe2.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\describe2.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\describe23236730.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\describe23236730.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\describe3.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\describe3.txt
+MOVED    C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\joblist.txt -> C:\Users\XKZ\Documents\VSCode Projects\ASCLocal\scratch\joblist.txt
+NOTE     leftover empty husk work/friday-round4/flowforge-deep-bsde-pde-c8d415de locked by another process (no files); contents already in archive/challenges/friday-round4
+END_BATCH5 2026-08-22 21:47:00 round4 combat zones archived; work/ intended template-only

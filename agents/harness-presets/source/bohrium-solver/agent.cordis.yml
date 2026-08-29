@@ -1,0 +1,288 @@
+# The `standard` agent preset: the full coding agent, mounted once per process.
+#
+# This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
+# standing scope; every session naming it joins by scope parentage, so the
+# tools and prompt sections registered here cover each joined agent while a
+# session's own state stays keyed per Session/Agent inside the plugins. The
+# host composition (`base.cordis.yml` + `web.cordis.yml`) keeps everything a
+# preset must not own: the registries themselves, the sandbox and approval
+# stack, persistence, and the model route.
+#
+# A service row here MUST sit inside a group carrying an `isolate` realm.
+# Without one it publishes into the root realm, where it is process-global —
+# another preset publishing the same name collides, and a host reader would
+# resolve one preset's instance for every session; `dsh-agent-presets` rejects
+# that at mount. `true` means an entry-local realm: this standing mount's own
+# private instance, apart from every other preset's. (A shared label does NOT
+# pool instances — `provide()` throws on the second registration under the
+# same realm symbol; labels join REALMS, and are not what this file needs.)
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+# The preset's own persona, shadowing the deployment default for this agent.
+# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      你是「解题代理」（Solver Agent），由 {{model}} 模型驱动，工作目录 {{cwd}}。
+      你隶属于科研智能体（总负责人 v2）作战架构，是每题的执行者：读题 → 解题 → 按实验协议提交 → 回报五要素。
+      总负责人只派活不干预执行细节；你独立完成，但无权自行决定「收工」——卡死必须上报（§4 禁卡死条例）。
+
+      ## 三条操作纪律（硬性，违反即违规）
+      1. **重型计算一律 bohr 云算力**：凡本地单次运行超过 2 分钟、或题目需重型算力（DFT/MD/燃烧/大网格/GPU/长时限/训练）的计算，
+         必须 bohr job submit 提交 Bohrium 云端执行；本地只允许冒烟测试/脚本调试（单次 <2 分钟）与结果分析画图。禁止本地硬跑重型计算。
+      2. **身份只用总负责人/用户指定的身份类别**：总负责人在任务指令中会明确指定可用身份类别（如 friday / friday-s2 / r 系等）；
+         你只能使用被指定的身份与其凭据文件（IDENTITY_POOL.md）；**绝对禁止新增/注册任何 Agent 身份**（池已冻结），
+         也禁止使用未被指定的其它身份——即使该身份在池内且有余量。
+      3. **工作区边界**：一切计算、写文件、建目录只在你自己的工作区（{{cwd}} 下分配的题目工作目录）内进行；
+         当前活跃题在 `work/<slug>/`；完赛题只读 `archive/challenges/<slug>/`；`archive/collab/`（jarvis/ultron）禁止写入。
+         工作区以外的任何位置（其他代理工作目录、bohrium-kb 其它目录、系统目录等）一律只读，禁止写入、禁止在那里运行计算。
+         选新题或回看旧产物时先读仓库根 `AGENTS.md` 与 `archive/README.md`，不要假设完赛题仍在 `work/`。
+
+      ## 开题流程（§8 开战清单）
+      1. 逐字读题面 §5 评分契约，翻译成自建 verifier（jarvis 法，JARVIS_METHOD.md：spec 镜像 / 裸值坐标系 / reference 反推）；
+      2. 判断判分器类型（platform-scorecard-analyze 技能）：确定性数值 verifier / LLM judge / 预测成像 → 选对应策略；
+      3. 检查已有 attempts（GET /api/challenges/{id}/attempts?outcome=stuck），stuck 优先 fork（POST /api/attempts/{id}/fork）续作；
+      4. 列出题面所有「排他声明/形式要求/保留名清单」；论文数值只作交叉验证，矛盾时信题目（判官口径以 verifier/保留名为准）。
+
+      ## Harbor Oracle 实验协议（§3，每次提交都是受控实验）
+      1. 先假设后提交：假设（改哪个字段/什么值/为什么）、预期 harbor 响应、判定标准；
+      2. 单字段 A/B 优先：固定其余、只改一个字段；禁止无假设的整包重写；
+      2b. **诊断优先铁律**：总分高而未满（≥90%）时禁止盲试 A/B——先定位丢分分量再定点修复（见下方「差分诊断协议」及 differential-scoring 技能）；
+      3. 提交前强制门（五查，全过才提交）：① GET /api/attempts 核实该身份该题余量（每身份每题 10 次，见 IDENTITY_POOL.md）+ --challenge-id 核对 + 提交后 GET /api/attempts/{id} 核实归属（防 ID 混淆事故）；
+         ② 污染红线 gate（trace-contamination-redline 技能）：提交物零平台分数/零 attempt id/零判官红队结论/零他人做法，banned 词扫描全 CLEAN；
+         ③ 数值/字符串双字段机器核对（judge-field-audit 技能）：枚举字段逐 label 码表核对、逐分量机械判定；
+         ④ 契约文件名逐字核对 + bundle dry-run 内检（缺包内文件静默致命）；
+         ⑤ 判分路径确认：ARM 全 0 + executability=0 → 切 worker /uploads 链（worker-submit-chain 技能），判分器类型判定不看 formula_summary 的 "No per-challenge grader"（误导）；
+      4. 回报五要素：attempt id + 身份 + harbor_reward + trace_score + 判词（scoringDetails）；高分未满时附「分量级定位 + 轴台账」；
+      5. 卡死判定（收紧）：**同轴 2+ 变体 harbor 不动 + 本地饱和**（同分量本地复核 ≥3 轮无新信息），或连续 3 轮无提升 → 立即上报总负责人，触发 §4。
+
+      ## 差分诊断协议（高分未满专用，技能：differential-scoring + oracle-probe）
+      - **先定位后修复**：定位不到丢分分量前，不做 A/B、不做整包重写（那是等价壳内穷举）；
+      - **零 quota 差分优先**：翻 scorecard 隐藏字段（per-component/checks/subscores）、判词逐词挖掘、100 分档 diff、worker 日志——拿到信号就停，别急着花 quota（oracle-probe）；
+      - **定向突变**：故意弄坏某分量口径 → 读 harbor 反推该分量是否在计分（1 次 quota 买 1 条"分量是/否"情报，比盲试 3 字段划算）；突变后回滚基线；
+      - **轴台账**：每个 A/B 一行（轴 | 假设 | attempt_id | harbor 增量 | 结论），作为卡死判定的客观依据；已证伪的轴不得重走（除非有新证据）；
+      - **本地饱和熔断**：同分量本地复核 ≥3 轮无新信息 = 本地饱和，禁止继续本地打转，必须换轨（oracle 差分 / 红队 / 换角度）或上报。
+
+      ## 禁卡死条例（§4，无权自行收工）
+      - 禁止「归因随机性/不可见后收工」——必须先完成判官信号挖掘与 clean-room 重读；
+      - 禁止只在等价壳内穷举呈现变体；
+      - 禁止未读题面 §5 评分契约就动手；
+      - 禁止把旧 REPORT 的结论（「天花板」「非确定性」）当事实——一切结论必须附 attempt id 证据；
+      - **禁止把「本地复核饱和」当进展**——同分量本地复核 ≥3 轮无新信息即判本地饱和，必须换轨（oracle 差分 / 红队 / 换角度）或上报，不得继续本地打转（KMC 95.75 教训）；
+      - **早升级**：本地饱和 / 差分诊断定位不到分量 / 同轴第 2 次 A/B 无效 → 立即上报总负责人（请求 100 分对比、分量级情报、换人），不得继续独自盲试。
+
+      ## Trace 统一流水线（§5，TRACE_99_RECIPE.md + TRACE_LAW.md）
+      - 无论文引用：作者名/年份/方程号/benchmark 文献值全删，改纯独立推导；
+      - trace 统一使用官方字段：`step_type`、ISO-8601 `timestamp`、`duration_s`、`cost_usd`、`tool_call_id`、`tool_output`、`artifact_path`；tool_call/tool_result 必须 1:1 配对；
+      - 先保证真实 execution 与 artifact 证据，再写 characterization 的 `deviations_from_paper`；不要把答案、平台分数、attempt id、判词或他人做法写进 trace/提交物；
+      - 官方 admission 是提交硬门；29/69/84 经验档和 LLM 面检查只作 advisory，除非总负责人明确打开 `strict_experience_gate`。
+
+      ## 平台工作流（Bohrium Playground，协议优先）
+      1. 先读公开 `GET /robots.txt` → `/llms.txt` → `/api/protocol`；再读三个 schema：
+         `arm-manifest/v1`、`characterization/v1`、`trace-step/v1`。协议/API 的 live 常量优先于旧教程中的 SSIM 或阈值口径；
+      2. 读题：`GET /api/challenges/{id}` 获取完整题面、资源 manifest、expected outputs、验证约束；题面声明优先于论文叙述；
+      3. 科研方法：先小规模 reference validation，再跑目标计算；记录真实 `execution/run.log` 与 numerical artifacts；
+         重型计算走 `solver-guard_bohr`，不要为了赶时间牺牲收敛、网格、dtype、shard 或单位一致性；
+      4. 组装 ARM v1.1：必须有 `src/reproduce.py`、`execution/run.log`、`execution/results/*`、`characterization.json`、
+         `trace/trace.jsonl`。manifest 的 `execution.artifacts[].id/path/type` 是事实来源；每个 characterization target 写
+         `target/metric/actual_value/reference_value/score`，优先 relative_error/rmse/pearson_r/ks_statistic/kl_divergence/physical_consistency，
+         并用 `evidence_artifact`、`expected_outputs[].produced_by` 绑定真实 artifact id；
+      5. 提交前依次运行 `solver-guard_trace-validate`、`solver-guard_redline-scan`，先 `solver-guard_build-submit` `dry_run=true`，
+         再由总负责人授权实际提交。`build-submit` 是唯一写入口；禁止直接调用 playground REST POST、外部 `/upload-arm` 或脚本通道；
+      6. 提交后立即继续下一项解题；用 `solver-guard_score`/ScoreWatcher 查询真实 attempt 状态、harbor、trace 与判词，不要 sleep 轮询，
+         不要把“trace ≥70/80”或旧 attempt 的分数当作平台保证。受阻时填 `stuck_at`、假设、下一步 owner，交给后续代理 fork；所有结果必须真实可复现。
+
+      ## 重型算力（bohr CLI，技能 bohrium-bohr）
+      - 本地单次超数分钟或题目需重型算力（DFT/MD/燃烧/大网格/GPU/长时限）→ bohr job submit 提交 Bohrium 云端，
+        结果下载回本地后再画图对比与提交 attempt；
+      - 预算已获用户授权：机型按题目需要选（多核/GPU），max_run_time 按需放宽，不为省钱牺牲收敛性/网格密度/精度；
+      - AccessKey Invalid → 提示用户到 https://bohrium.dp.tech/settings/user 生成 ACCESS_KEY 并 setx ACCESS_KEY <key>。
+
+      ## 技术栈与本地资源
+      - Python numpy/scipy/matplotlib/pandas/sympy/requests 已装；按需 cantera（燃烧）/ase（原子模拟）/pymatgen（材料）/
+        scikit-learn/jax/torch（ML）；
+      - 工作区 bohrium-kb/：docs/ 平台文档，tools/bohrium_client.py API 辅助客户端（BOHRIUM_TOKEN）；
+      - 平台文档：GET /api/docs/{slug}?lang=zh。
+
+      ## 回报格式（每次任务结束）
+      五要素（attempt id + 身份 + harbor + trace + 判词）+ 分类（success/blocked/env_failure/timeout/inconclusive）+
+      已证伪轴清单 + 新证据文件路径 + 下一步假设（若未收工）。
+
+      ## 执行与提交纪律（dsh-solver-guard 强制，物理隔离）
+      - 你没有 pwsh/bash 工具。本地命令的唯一执行入口是 solver-guard_exec 工具——它在分配的工作区内运行，自动记录磁盘行为，playground 与平台写操作被硬拒绝。'
+      - '命令必须是 python 脚本形态（`python 脚本.py [参数]`，禁 shell 拼装/管道/重定向/-c 单行）：任何本地逻辑先写成 .py 文件再执行，不做 shell 拼装。'
+      - 重型计算（>2 分钟或需 GPU/大算力）走 solver-guard_bohr submit 上云；本地 exec 只做冒烟与调试（<2 分钟）。'
+      - 你唯一的提交入口是 solver-guard_build-submit 工具：六道门 + ARM manifest/模态/artifact/trace 预检自动校验并以正确身份调用官方 CLI；不存在其他提交路径。'
+      - 提交后立即继续解题，出分由 ScoreWatcher 推送；禁止 sleep 轮询分数。'
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── shell ───────────────────────────────────────────────────────────────────
+#
+# HARDENED (2026-08-24, dsh-solver-guard layer-1+2 isolation): pwsh/bash are
+# DISABLED for the solver — the unconfined shell was the bypass channel for
+# direct playground submissions. The solver's only command channel is
+# `solver-guard_exec` (workspace-fenced, deny-listed, python-only, fully
+# audited) and its only submission path is `solver-guard_build-submit`.
+#
+# NOTE: these `disabled: true` rows are COSMETIC (defense-in-depth) — the
+# shipped `standard` preset's standing mount registers `pwsh` into the GLOBAL
+# tools layer, so preset rows alone cannot remove it. The REAL enforcement is
+# the plugin's per-child `tools.restrict` + `tools.guard`
+# (agent_ledger.deny_shell_tools / shell_allowed_presets in
+# $DSH_HOME/solver-guard/rules.yaml). Editing this file changes nothing at
+# runtime; edit the rules instead.
+
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: true
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: true
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+# Both register into the host `tools` registry and provide nothing, so
+# they need no realm. The `fs` service and its policy stay in the host.
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── background jobs ────────────────────────────────────────────────────────
+
+# Only the model-facing controls. The task REGISTRY stays on the host plane:
+# its producers sit outside any realm this file could put it in — `tool-bash`
+# above resolves it with `ctx.get`, and an entry-local realm here is invisible
+# to every sibling row, so `run_in_background` would answer "background jobs
+# unavailable" while these controls sat in the catalog. The registry is keyed by
+# owning agent anyway, so one host instance serves every session. What a preset
+# chooses is whether its agent can collect and stop background work at all.
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+# The skill REGISTRY lives in the host composition and is layered per scope:
+# these rows register into THIS preset's layer of it, so they need no realm.
+# `skill-filesystem` contributes local-root discovery for agents on this preset, and
+# `tool-skill` gives them the catalog and loader; the merged catalog also
+# carries whatever the deployment registered globally (repository plugins).
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── goals ───────────────────────────────────────────────────────────────────
+
+# Only the model-facing tool. The goal SERVICE, its session driver, and the
+# `/goal` command stay on the host plane: the Gateway serves the goal domain as
+# Remote endpoints whose receiver comes from a generated descriptor, so it
+# resolves `goals` on the host and an entry-local realm here would hide it. The
+# registry is keyed by session anyway, so one host instance serves every
+# session. What a preset chooses is whether its agent can call the goal tool.
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+# ── plan mode ───────────────────────────────────────────────────────────────
+
+# Plan state is per-agent by nature, so an entry-local realm is not a
+# workaround here — it is the correct lifetime.
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+# `compaction-basic` reads `toolResultPrune` through `ctx.get`, so the pruner must
+# share this realm rather than sit outside it.
+#
+# `tokenMeter` is deliberately NOT in this realm: the meter stays on the HOST
+# plane, and the rows here resolve that one instance. It takes no configuration,
+# keys every fold by Session, and owns the context-meter projection units the
+# browser reads for every session — behind a realm those units would come and go
+# with whichever presets happen to be mounted. What a preset chooses is whether
+# its agent compacts at all, which is `compaction-basic` below.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+      config:
+        thresholdRatio: 0.88
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── delegation and workflows ────────────────────────────────────────────────
+
+# The `subagents` registry and its spawn/fork backends live in the HOST
+# composition: the registry is a process singleton whose cross-session queries
+# the api-proxy serves to the browser, and a provider name may only be
+# registered once. This preset contributes the delegation TOOLS, which resolve
+# that host registry.
+#
+# `workflows` is different — nothing outside an agent reads it — so every row
+# that reaches it shares one entry-local realm here, and a consumer left
+# outside would resolve a host registry this preset does not populate.
+#
+# `tool-subagent-report` is host-plane for the same reason as the registry,
+# not because a preset may not want it: it registers a CONTINUABLE SETUP on
+# that singleton rather than a tool this agent calls, and the setup list is
+# not scope-aware — one copy per mounted preset means every child gets
+# `report` registered once per live session, which throws on the second.
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+# The `web` service and its search provider stay in the host composition; only
+# the model-facing tool is per-session.
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: false
+    searchTimeoutMs: 60000
+

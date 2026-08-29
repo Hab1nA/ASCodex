@@ -1,0 +1,392 @@
+{
+  "generated_at_utc": "2026-08-28T10:41:12.9869048Z",
+  "source": "C:\\Users\\XKZ\\dsh-plugins\\dsh-solver-guard",
+  "file_count": 77,
+  "files": [
+    {
+      "path": ".audit-probes\\arm-manifest.json",
+      "bytes": 10569,
+      "sha256": "6D992FA03771AE53FF0BEEB4F4C724DF3784377E597175FF52789C28F69BAEF1"
+    },
+    {
+      "path": ".audit-probes\\arm-manifest.pretty.json",
+      "bytes": 18707,
+      "sha256": "7ECE62CFFB0331D7D9D468073F27C62DFC05DEB7E8052A6D527512003CF792EC"
+    },
+    {
+      "path": ".audit-probes\\attempt-33460.json",
+      "bytes": 1392,
+      "sha256": "EF8320D694721704CE12022EA3C88FFFAEF8A24916C1B3D74B9DE346842C8A98"
+    },
+    {
+      "path": ".audit-probes\\attempt-33460.pretty.json",
+      "bytes": 1620,
+      "sha256": "D22DFACE9B9B8FF77601504A5CBB72044F1A561804E4467D8D9DCE9450C67B23"
+    },
+    {
+      "path": ".audit-probes\\benchmarks.json",
+      "bytes": 7067,
+      "sha256": "16012A3FBB2EB206098683BB9DC131B9B2AF8FF1FCEFE6AB4A391C86DDC4341F"
+    },
+    {
+      "path": ".audit-probes\\challenges.json",
+      "bytes": 41607,
+      "sha256": "D93CA8198EC3A14C10E7E5D11EA297829368DA2357211E0A21ABDE3EDC4BF1E5"
+    },
+    {
+      "path": ".audit-probes\\characterization.json",
+      "bytes": 4330,
+      "sha256": "13007EDFA4BF1BC27A207D1041A6D5BE32A1B5E548343D2795A380799963DFD8"
+    },
+    {
+      "path": ".audit-probes\\characterization.pretty.json",
+      "bytes": 6352,
+      "sha256": "7ACF952DAB929CEEAFEEBCD374038917D0A92335C5E97658812E8DB4811BAB4A"
+    },
+    {
+      "path": ".audit-probes\\protocol.json",
+      "bytes": 7172,
+      "sha256": "6540772B580E281F1BB55CA9AA06BF48B3E78D113164055A40D7BA3D0E5B910C"
+    },
+    {
+      "path": ".audit-probes\\protocol.pretty.json",
+      "bytes": 9543,
+      "sha256": "FBAB117B02043B87F30F676230AAD7407D20B06D6694E489B9B7523E9CC25446"
+    },
+    {
+      "path": ".audit-probes\\trace-step.json",
+      "bytes": 1656,
+      "sha256": "88E5AF4F92B2888D990D6EAC6C1C6D238269ED25799E95B583B854AE01834A2C"
+    },
+    {
+      "path": ".audit-probes\\trace-step.pretty.json",
+      "bytes": 2227,
+      "sha256": "CF279C53100581B1704F6FFFC304325329E298A8B637E82F7F4322B5DF8D124E"
+    },
+    {
+      "path": "CAPABILITIES.md",
+      "bytes": 5540,
+      "sha256": "06A2997D2CFE362E90331AC955921FF5546ABE784915CF524EB3F2316689E5D3"
+    },
+    {
+      "path": "docs\\redteam\\2026-08-27-playground-redteam.md",
+      "bytes": 9534,
+      "sha256": "031368AD35B32C1C6FE702C95CDDEEF8234F29923877255F619EE98B288D8635"
+    },
+    {
+      "path": "docs\\SETTINGS_UI_PLAN.md",
+      "bytes": 6687,
+      "sha256": "D016926270A5EFBA1D14B64F655EF18A6908AE91EB4308CF6F4273CF2EABB577"
+    },
+    {
+      "path": "docs\\superpowers\\plans\\2026-08-27-protocol-first-redteam.md",
+      "bytes": 23575,
+      "sha256": "66E1187F2534DE74D189A682425D7CF494AA50FCC999B8E9B5AF28FDD32EB5C9"
+    },
+    {
+      "path": "lib\\autopush.js",
+      "bytes": 31783,
+      "sha256": "B77AB76A08571A62B6265D2DC4A9AA0EB54595CBAD8A15E0AC5B93CB045476AD"
+    },
+    {
+      "path": "lib\\bohr.js",
+      "bytes": 9820,
+      "sha256": "0E90B17BFDABCC69D88743B78D122B3E61EAEA821E4A8A63B91850F4F9EBD0AD"
+    },
+    {
+      "path": "lib\\cli.js",
+      "bytes": 3567,
+      "sha256": "E968700BBE3EDD39B4EB9A636F083B4C32A783110B4435CDEC4928AEE6199D16"
+    },
+    {
+      "path": "lib\\client.js",
+      "bytes": 49428,
+      "sha256": "1BAAB45D4210DF9F402C55639516AFBC0CBC9F0000B75288DE5E75DA581267D5"
+    },
+    {
+      "path": "lib\\client.js.bak-m1",
+      "bytes": 23272,
+      "sha256": "F187678E490D67813CD9A2A60FFB84FEB840A6771773416CDDC1D6DC1A4A228B"
+    },
+    {
+      "path": "lib\\contract.js",
+      "bytes": 25567,
+      "sha256": "58B7C7287CD938B35EA49C1CCFFB0C7E4668DFDE06FEE0FF46174F13B208A94C"
+    },
+    {
+      "path": "lib\\diskmon.js",
+      "bytes": 5985,
+      "sha256": "BB75032D0AE36E10B66BE59C60EB0B04B74FD9DB53F7C8DD231C979814E5A49E"
+    },
+    {
+      "path": "lib\\exec.js",
+      "bytes": 14806,
+      "sha256": "9DB91C9D3D40C3F4A0813D1807BABE4CD487DFD5797AEC4C088617102F465832"
+    },
+    {
+      "path": "lib\\gates\\arm-bundle.js",
+      "bytes": 21635,
+      "sha256": "7FBDE4E0C27813E14EBA79F1E29E8F958B3A101BA5557F8B61535F951FD6A535"
+    },
+    {
+      "path": "lib\\gates\\cadence.js",
+      "bytes": 7251,
+      "sha256": "C4FE3213C0789CA20BE3C545B32C0549842EBC918D6B9B8AB981BE9AC824B22D"
+    },
+    {
+      "path": "lib\\gates\\channel.js",
+      "bytes": 3340,
+      "sha256": "8631321784AB772A8887FB1E3302C33D46927E13ADD77DE8777C05B65B1852C6"
+    },
+    {
+      "path": "lib\\gates\\identity.js",
+      "bytes": 5782,
+      "sha256": "A90E248A46605D3F8A57CAC247D2AD7899E00C6CD1311062DE6CCC88240CE7FE"
+    },
+    {
+      "path": "lib\\gates\\llm-surface.js",
+      "bytes": 7062,
+      "sha256": "913C676AFDDB6CAA15973D944206ECED8B37BD2A3348968955EF152D916AC453"
+    },
+    {
+      "path": "lib\\gates\\redline.js",
+      "bytes": 3322,
+      "sha256": "26C0BB89A4A008E4AD70762AA0B13B15D7BDF51A6EDDE42907CEF235FD77F5AD"
+    },
+    {
+      "path": "lib\\gates\\trace-check.js",
+      "bytes": 25064,
+      "sha256": "B501B6E488DD8E995F0468FF2085D678632C1214113F892240BEB82DCC8AEC16"
+    },
+    {
+      "path": "lib\\index.js",
+      "bytes": 125267,
+      "sha256": "50A73522E5968B87055D4B0E2A10F1C6279EA74B736299707C10C5E8E31AA496"
+    },
+    {
+      "path": "lib\\injector\\compiler.js",
+      "bytes": 3698,
+      "sha256": "187A00CE960A2BFD1EA3A8259CFC61FE28BC7A499DC23DE9C48ED8DAB6F3D929"
+    },
+    {
+      "path": "lib\\injector\\detector.js",
+      "bytes": 3882,
+      "sha256": "CD3610F99299F8A410F652F2F1826E83B82B39332675617393BB96E998C34315"
+    },
+    {
+      "path": "lib\\injector\\engine.js",
+      "bytes": 5169,
+      "sha256": "6C9049A5C4A5DFA30A17286540604D2A437A18C5D24BCD5FCC884233D5022CFE"
+    },
+    {
+      "path": "lib\\injector\\index.js",
+      "bytes": 5843,
+      "sha256": "9C5E005ECDFFEDFE5E57AA60CC3CC8A60602F0D04CCD89C7363BADA50DD0B68E"
+    },
+    {
+      "path": "lib\\leaderboard.js",
+      "bytes": 7045,
+      "sha256": "2E4F4EB93F288A51FEB50C867C56C9628C9000DEEA1185E1794F63B0F8686295"
+    },
+    {
+      "path": "lib\\ledger.js",
+      "bytes": 15646,
+      "sha256": "AE76D6BA0664BB8AE2822D308ADCB5E60CAA01B81DE261370AF6FEF634B6C0BC"
+    },
+    {
+      "path": "lib\\model.js",
+      "bytes": 7844,
+      "sha256": "58E295828CCA3901B98E4175731B92AF7E31448815DF05A7690533AE6E7EC326"
+    },
+    {
+      "path": "lib\\monitor.js",
+      "bytes": 15797,
+      "sha256": "13E199F974021C78291717D08A4EE06DBEB530EBC4D110E00BFF7B4C8C82261D"
+    },
+    {
+      "path": "lib\\reconcile.js",
+      "bytes": 11968,
+      "sha256": "293143F48EE90BEDEEA28DB75299E7B2E2CC0E615AF531CA99295470FEBA0437"
+    },
+    {
+      "path": "lib\\rules.js",
+      "bytes": 19494,
+      "sha256": "BEFC07FA632C17A96E806C7AA630C47BF9DC28E30B0A0EE3EC63C69BD3A7344C"
+    },
+    {
+      "path": "lib\\score.js",
+      "bytes": 9552,
+      "sha256": "E73B501EAE8DC36D022AE3780D20242DFC29B04D223D21A004030FA414BC1792"
+    },
+    {
+      "path": "lib\\settings-bridge.js",
+      "bytes": 6311,
+      "sha256": "3E93614BB4B65E2E59F4D0F34980F3B8440A48DE59513C7AEE4EC631255B2ADE"
+    },
+    {
+      "path": "lib\\settings-bridge.js.v2",
+      "bytes": 12,
+      "sha256": "9293C1C8D337C3A5DC648613B46D266782B22E5039140A17EE843A31EF9CF22E"
+    },
+    {
+      "path": "lib\\state.js",
+      "bytes": 6457,
+      "sha256": "1FAE7950738D281279CB8668261C649482DE2C62984C469ACFAF6C6619374FF6"
+    },
+    {
+      "path": "lib\\status.js",
+      "bytes": 4173,
+      "sha256": "1740E701C042D634987D816772D8FC0BDD61B4C38E08622487CE79673BBE4C6D"
+    },
+    {
+      "path": "lib\\strategy.js",
+      "bytes": 3087,
+      "sha256": "681E69BD2EC1CF1A0C34B3646A5D5ED9E4385654A334DA534FAF05E63125623E"
+    },
+    {
+      "path": "lib\\submit.js",
+      "bytes": 34005,
+      "sha256": "B10CA6A2E809ADA2D1B02BBB3A4185FD7DB9F7D3C8E7F2CBF341DBD3C8871348"
+    },
+    {
+      "path": "lib\\titles.js",
+      "bytes": 2591,
+      "sha256": "6E6635617A489F8F139FE294EB610ED589993C5D7502851AC36546FFCC492828"
+    },
+    {
+      "path": "lib\\trace-feedback.js",
+      "bytes": 7165,
+      "sha256": "5BABA0BC1AC5628EF618F2A734727BD526E9BFCD82B9A18E7DDC8E0BA06FE0CA"
+    },
+    {
+      "path": "lib\\tracegen.js",
+      "bytes": 20266,
+      "sha256": "36DC0CCCD053F3C50FD964A2029F5DBCB1F071F10C2655EEAAA51059B506B902"
+    },
+    {
+      "path": "lib\\workspace.js",
+      "bytes": 4386,
+      "sha256": "226CB5AFCDD9D9F201942EE29080D9D68A0176045C01CA4B5B59A0BC64024815"
+    },
+    {
+      "path": "package.json",
+      "bytes": 1159,
+      "sha256": "5B3001A73519173111C7665E944C79B0A7D0BB43155A5288D414365705B16ABD"
+    },
+    {
+      "path": "README.md",
+      "bytes": 7084,
+      "sha256": "EC9D44AD00F5E2456256FA6A3C24F6A3C0AAD71BE5E61A0CCB6EAF1D76D0F313"
+    },
+    {
+      "path": "test\\arm-bundle.test.mjs",
+      "bytes": 7261,
+      "sha256": "F8B18508CEAF631CC38F8B5045B916259780A9A714AA6912B85585378574165F"
+    },
+    {
+      "path": "test\\audit-reconcile-contract.test.mjs",
+      "bytes": 14419,
+      "sha256": "B8845725E5A9EF8A20AB6359FB289D047416BC8CD32C785D37BB1F2C2B993924"
+    },
+    {
+      "path": "test\\autopush.test.mjs",
+      "bytes": 11181,
+      "sha256": "9BCF7B150A18B33A3F5ED5AF9C944677F18D2D2E959F23390DC3110C921E1CF0"
+    },
+    {
+      "path": "test\\boot-smoke.test.mjs",
+      "bytes": 3493,
+      "sha256": "962EA559739E03AE3BC2402F48DD8F37EB81E6232A1D10EC7739C760AB1AA742"
+    },
+    {
+      "path": "test\\client-scope.test.mjs",
+      "bytes": 3838,
+      "sha256": "8A216CCE463C85149B5CE1200077AC45395159BA245257880237EEF74BE3519B"
+    },
+    {
+      "path": "test\\exec.test.mjs",
+      "bytes": 12039,
+      "sha256": "F2E5108A30399C4F3FEE23ADA23753EB01DF50A1D17B1B1632C4B68E1297864B"
+    },
+    {
+      "path": "test\\gates.test.mjs",
+      "bytes": 12965,
+      "sha256": "1AAF17392B29FFAAA704165FDDCE9B32326B05F7A99895C4AAF987A4DFD37D5D"
+    },
+    {
+      "path": "test\\identity-whitelist.test.mjs",
+      "bytes": 5912,
+      "sha256": "BEAEA127CB65627AB69D9B85D8E41488868C8DE356D6CFEDF15E5FC3629D4CD0"
+    },
+    {
+      "path": "test\\injector-monitor.test.mjs",
+      "bytes": 14782,
+      "sha256": "D80E38E36454627A9B5C700AEBA2D3EA6FAF5E64B5DA3510F386E0F2F7F0C94C"
+    },
+    {
+      "path": "test\\leaderboard.test.mjs",
+      "bytes": 4894,
+      "sha256": "341DAF38E2805A3A58C186D21ACCD044F4E17E8CFF34809D702EDF6F35490CE1"
+    },
+    {
+      "path": "test\\ledger-diskmon.test.mjs",
+      "bytes": 15622,
+      "sha256": "91BB668653EECCFD78D4554630FC83044200961CA8AB3D10096EE5A972379B8F"
+    },
+    {
+      "path": "test\\minimal-trace.jsonl",
+      "bytes": 1140,
+      "sha256": "335DCEA34073458268640BC2695684980FA7498B819381BC76F7E5F2D99E19C8"
+    },
+    {
+      "path": "test\\model.test.mjs",
+      "bytes": 6505,
+      "sha256": "F59FEBA4D42457B0CC635ACBA73B42D77D27C3C7660AD1D6D3F9EE1C908E9820"
+    },
+    {
+      "path": "test\\protocol-advice.test.mjs",
+      "bytes": 979,
+      "sha256": "5B19A17DD5C7D7223D236DF8096757F87921472403C6C11E5924B4C57A9A5DB8"
+    },
+    {
+      "path": "test\\score-helpers.test.mjs",
+      "bytes": 2435,
+      "sha256": "1ABF546B092E5C0139A2E3E5CCA76DC1B189232A8CEB0D5F39FEBBECC7704DBC"
+    },
+    {
+      "path": "test\\state-submit-bohr.test.mjs",
+      "bytes": 10317,
+      "sha256": "1C5AD687B0FA28920187062C77D02DA161E9A4C5AB5AE785B45C57AF0773F06F"
+    },
+    {
+      "path": "test\\strategy.test.mjs",
+      "bytes": 1453,
+      "sha256": "6CA3CB6143ECCCA655406AA61C0C0CF6DAFD629CC8E1F7171F61AB0099640F0D"
+    },
+    {
+      "path": "test\\submit-concurrency.test.mjs",
+      "bytes": 5822,
+      "sha256": "2EA2CA17CD2A9CC445CC939B5026386BFF29593B0C475B88AE67B45DD084CAF1"
+    },
+    {
+      "path": "test\\submit-gates-protocol.test.mjs",
+      "bytes": 16527,
+      "sha256": "93C0EBD5EB97A5F1753F8EB5E1D33B2853899AC67B7F7EF6713238F5EE03D207"
+    },
+    {
+      "path": "test\\trace-redline.test.mjs",
+      "bytes": 19127,
+      "sha256": "3425721C8263191165C823E0E16A5B9301CD2E9B0C79E59FCE64DDBAB66CD661"
+    },
+    {
+      "path": "test\\tracegen.test.mjs",
+      "bytes": 11920,
+      "sha256": "F6EA132C56F7A3B18E387B41399AFCAE7DBC497010B00204E90839DDD5A1B433"
+    },
+    {
+      "path": "test\\workspace.test.mjs",
+      "bytes": 1739,
+      "sha256": "01E3D10D44977C5F6A8979BAC62983CC0570987502A5F7BE89B5FDB49E1680D6"
+    }
+  ]
+}

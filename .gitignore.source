@@ -1,0 +1,35 @@
+# --- secrets / credentials ---
+bohrium-kb/creds/
+**/.credentials.yaml
+**/*credentials*
+*.pem
+*.key
+
+# --- bulk binaries / datasets ---
+*.zip
+*.npy
+*.npz
+*.h5
+*.h5ad
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# --- python / tool caches ---
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# --- local dumps ---
+scratch/
+_logs/
+_artifacts/
+_research/
+
+# --- agent / editor local ---
+.agents/
+.claude/
+.dsh/
+.wenyon/

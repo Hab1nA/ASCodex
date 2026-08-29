@@ -1,0 +1,25 @@
+# Schema-compatible dry-run fixture. Replace placeholders only in a local, ignored file.
+channel:
+  harbor_only: true
+  workspace_root: C:/path/to/ascodex/workspace
+  # Optional. Required when the trusted CLI is installed outside workspace_root.
+  trusted_cli_root: C:/path/to/ascodex/workspace
+  trusted_cli_sha256: 0000000000000000000000000000000000000000000000000000000000000000
+identity:
+  name: example-identity
+  challenge_id: example-challenge
+  owner: example-owner
+cadence:
+  min_interval_seconds: 60
+  max_estimated_cost_usd: 0.0
+redline:
+  clean: true
+  # Optional campaign-specific terms; built-in platform-feedback terms remain enabled.
+  banned_terms: []
+trace:
+  real_execution: true
+  paired_tool_events: true
+  artifact_provenance: true
+model:
+  provider: example-provider
+  model: example-model

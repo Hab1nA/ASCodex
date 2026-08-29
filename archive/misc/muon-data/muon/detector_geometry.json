@@ -1,0 +1,15 @@
+{
+  "coordinate_unit": "mm",
+  "hit_layout": "hits[event, layer, xy]",
+  "layer_z_mm": [415.0, 215.0, -215.0, -415.0],
+  "layers": 4,
+  "coordinates_per_hit": ["x", "y"],
+  "single_hit_resolution_mm": 1.0,
+  "single_hit_resolution_definition": "per-coordinate Gaussian standard deviation",
+  "image_plane_z_mm": 0.0,
+  "image_extent_mm": [-120.0, 120.0, -120.0, 120.0],
+  "pixel_size_mm": 1.0,
+  "output_shape": [240, 240],
+  "output_orientation": "row index increases with y; column index increases with x",
+  "output_sign": "positive means stronger interaction than local background; negative means weaker interaction"
+}

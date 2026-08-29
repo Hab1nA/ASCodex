@@ -1,0 +1,287 @@
+{
+  "generated_at_utc": "2026-08-27T17:12:50.0226322Z",
+  "source": "C:\\Users\\XKZ\\dsh-plugins\\dsh-solver-guard",
+  "file_count": 56,
+  "files": [
+    {
+      "path": "CAPABILITIES.md",
+      "bytes": 4749,
+      "sha256": "4B1110C0CCB0B21F6D9476428CD7BE1E43DB8A2DDBA3868A6966A3E49751939A"
+    },
+    {
+      "path": "docs\\redteam\\2026-08-27-playground-redteam.md",
+      "bytes": 7830,
+      "sha256": "F56D06C3DCA276810F3DF9EFCDA8979F181D067277EB947DC8746726F514FB23"
+    },
+    {
+      "path": "docs\\SETTINGS_UI_PLAN.md",
+      "bytes": 6687,
+      "sha256": "D016926270A5EFBA1D14B64F655EF18A6908AE91EB4308CF6F4273CF2EABB577"
+    },
+    {
+      "path": "docs\\superpowers\\plans\\2026-08-27-protocol-first-redteam.md",
+      "bytes": 23575,
+      "sha256": "66E1187F2534DE74D189A682425D7CF494AA50FCC999B8E9B5AF28FDD32EB5C9"
+    },
+    {
+      "path": "lib\\autopush.js",
+      "bytes": 30825,
+      "sha256": "C58891182433BE9A5339FC64F054CEDDC2FC975E03DB663A77633CC5FBCE67D5"
+    },
+    {
+      "path": "lib\\bohr.js",
+      "bytes": 9820,
+      "sha256": "0E90B17BFDABCC69D88743B78D122B3E61EAEA821E4A8A63B91850F4F9EBD0AD"
+    },
+    {
+      "path": "lib\\cli.js",
+      "bytes": 3567,
+      "sha256": "E968700BBE3EDD39B4EB9A636F083B4C32A783110B4435CDEC4928AEE6199D16"
+    },
+    {
+      "path": "lib\\client.js",
+      "bytes": 48877,
+      "sha256": "8A20C997887823C88864B02C6A7DF9C688594AB5B05E45620EAF1E60F01092A9"
+    },
+    {
+      "path": "lib\\client.js.bak-m1",
+      "bytes": 23272,
+      "sha256": "F187678E490D67813CD9A2A60FFB84FEB840A6771773416CDDC1D6DC1A4A228B"
+    },
+    {
+      "path": "lib\\diskmon.js",
+      "bytes": 5985,
+      "sha256": "BB75032D0AE36E10B66BE59C60EB0B04B74FD9DB53F7C8DD231C979814E5A49E"
+    },
+    {
+      "path": "lib\\exec.js",
+      "bytes": 14740,
+      "sha256": "E3FA5E0A91FBD699FC87CB3EA9095A0EEBF1D646A74788D887770DD8EA15B4B0"
+    },
+    {
+      "path": "lib\\gates\\arm-bundle.js",
+      "bytes": 20814,
+      "sha256": "6CEEFF453B83F8720C6C28A70E8F5DCBE1D02E2397931D0BD8B057F6CE04215D"
+    },
+    {
+      "path": "lib\\gates\\cadence.js",
+      "bytes": 6854,
+      "sha256": "2A688C1A890413DD26D603A0373014FA360ED421316A9B333ACEFEA776C682CF"
+    },
+    {
+      "path": "lib\\gates\\channel.js",
+      "bytes": 2912,
+      "sha256": "E9DEB1CD1D074C7F190BC19A2952C419D6128C0AFD861E6DCD20693A8F98F26B"
+    },
+    {
+      "path": "lib\\gates\\identity.js",
+      "bytes": 5782,
+      "sha256": "A90E248A46605D3F8A57CAC247D2AD7899E00C6CD1311062DE6CCC88240CE7FE"
+    },
+    {
+      "path": "lib\\gates\\llm-surface.js",
+      "bytes": 7062,
+      "sha256": "913C676AFDDB6CAA15973D944206ECED8B37BD2A3348968955EF152D916AC453"
+    },
+    {
+      "path": "lib\\gates\\redline.js",
+      "bytes": 3322,
+      "sha256": "26C0BB89A4A008E4AD70762AA0B13B15D7BDF51A6EDDE42907CEF235FD77F5AD"
+    },
+    {
+      "path": "lib\\gates\\trace-check.js",
+      "bytes": 21618,
+      "sha256": "0F6A3213C5FD5FB2C33650DC19294F54F6F060B2882F70F0E300A3FA586C61B5"
+    },
+    {
+      "path": "lib\\index.js",
+      "bytes": 96878,
+      "sha256": "42FDBF5EDEC0D79E46E47D7A4E9138915EFC36B802D764A58FF646D0A5D2465B"
+    },
+    {
+      "path": "lib\\injector\\compiler.js",
+      "bytes": 3698,
+      "sha256": "187A00CE960A2BFD1EA3A8259CFC61FE28BC7A499DC23DE9C48ED8DAB6F3D929"
+    },
+    {
+      "path": "lib\\injector\\detector.js",
+      "bytes": 3882,
+      "sha256": "CD3610F99299F8A410F652F2F1826E83B82B39332675617393BB96E998C34315"
+    },
+    {
+      "path": "lib\\injector\\engine.js",
+      "bytes": 3732,
+      "sha256": "3ECE7054EC181BEF2ECD4E6015DD25F9074DF16B600B267C05E00CFA05CCAB98"
+    },
+    {
+      "path": "lib\\injector\\index.js",
+      "bytes": 5843,
+      "sha256": "9C5E005ECDFFEDFE5E57AA60CC3CC8A60602F0D04CCD89C7363BADA50DD0B68E"
+    },
+    {
+      "path": "lib\\ledger.js",
+      "bytes": 15321,
+      "sha256": "DDD4009636FECF5A00BF9F5E41BE5275465EE8AB9C8204E95143B330AA3E5F8C"
+    },
+    {
+      "path": "lib\\model.js",
+      "bytes": 6745,
+      "sha256": "DD1535B7A2947128C529A56869F50043B56DB131C3C30A20D9063CD7644A7B97"
+    },
+    {
+      "path": "lib\\monitor.js",
+      "bytes": 13730,
+      "sha256": "DA6AB167EED95B97D213A1D8FC0C8A287271FB4B5AD5E918BF21BFA8AF4800E6"
+    },
+    {
+      "path": "lib\\rules.js",
+      "bytes": 17964,
+      "sha256": "98D80D2B878722462288E7C08B7D655E4BD1B98EF330484570837258F1099455"
+    },
+    {
+      "path": "lib\\score.js",
+      "bytes": 1414,
+      "sha256": "D13A38388652379FBEC174EF4347664857394E6DDC3C8F2E0D745638BE6AF591"
+    },
+    {
+      "path": "lib\\settings-bridge.js",
+      "bytes": 6287,
+      "sha256": "1ED3B9EF78E09C012B52D7DE08685E78228BC44276D778F87993028C69F718CF"
+    },
+    {
+      "path": "lib\\settings-bridge.js.v2",
+      "bytes": 12,
+      "sha256": "9293C1C8D337C3A5DC648613B46D266782B22E5039140A17EE843A31EF9CF22E"
+    },
+    {
+      "path": "lib\\state.js",
+      "bytes": 6444,
+      "sha256": "296F2933F24FC36A6775AF2B1DA25E73A295D84C7F219F587107B60DF1DD6788"
+    },
+    {
+      "path": "lib\\submit.js",
+      "bytes": 26227,
+      "sha256": "38CCF4547FD7EB12CAE0D335FB16187FEB5E7181FF3D0BDB64289420D570AB83"
+    },
+    {
+      "path": "lib\\titles.js",
+      "bytes": 2591,
+      "sha256": "6E6635617A489F8F139FE294EB610ED589993C5D7502851AC36546FFCC492828"
+    },
+    {
+      "path": "lib\\trace-feedback.js",
+      "bytes": 7165,
+      "sha256": "5BABA0BC1AC5628EF618F2A734727BD526E9BFCD82B9A18E7DDC8E0BA06FE0CA"
+    },
+    {
+      "path": "lib\\workspace.js",
+      "bytes": 4386,
+      "sha256": "226CB5AFCDD9D9F201942EE29080D9D68A0176045C01CA4B5B59A0BC64024815"
+    },
+    {
+      "path": "package.json",
+      "bytes": 1159,
+      "sha256": "5B3001A73519173111C7665E944C79B0A7D0BB43155A5288D414365705B16ABD"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6890,
+      "sha256": "3AAE9C81E32AD0B2C405964A3A0DCA361F38155517ABED8821609167E8C6DC16"
+    },
+    {
+      "path": "test\\_patch-client.mjs",
+      "bytes": 10106,
+      "sha256": "B0AD089F0AD1FD4D69468AE7F891F2571C9606A8754FDC65D5D5909174E38568"
+    },
+    {
+      "path": "test\\_patch-index.mjs",
+      "bytes": 3508,
+      "sha256": "C8CCADD6D3AC0427861A0680EFB4D71DF3589B76B6CF0B435F6563BB242660FB"
+    },
+    {
+      "path": "test\\arm-bundle.test.mjs",
+      "bytes": 7261,
+      "sha256": "F8B18508CEAF631CC38F8B5045B916259780A9A714AA6912B85585378574165F"
+    },
+    {
+      "path": "test\\autopush.test.mjs",
+      "bytes": 10163,
+      "sha256": "DEC4072208E7E0A9BA2D5B5118F700A4EB003FD20378B58C303A0CE4FB6D2983"
+    },
+    {
+      "path": "test\\client-scope.test.mjs",
+      "bytes": 3838,
+      "sha256": "8A216CCE463C85149B5CE1200077AC45395159BA245257880237EEF74BE3519B"
+    },
+    {
+      "path": "test\\exec.test.mjs",
+      "bytes": 11817,
+      "sha256": "C5A357B8839F0DB14BF261611FB9A4B0A1ED24C4BDF0880AA8D05FF3C3104F89"
+    },
+    {
+      "path": "test\\gates.test.mjs",
+      "bytes": 12146,
+      "sha256": "24A0184ED9FAB0AB360BA1BF354774AE11BA6FFCB28B0F4863DB6059AA302A1C"
+    },
+    {
+      "path": "test\\identity-whitelist.test.mjs",
+      "bytes": 5912,
+      "sha256": "BEAEA127CB65627AB69D9B85D8E41488868C8DE356D6CFEDF15E5FC3629D4CD0"
+    },
+    {
+      "path": "test\\injector-monitor.test.mjs",
+      "bytes": 11908,
+      "sha256": "FC68EF9CC527EA0C1B427F4364B6C3673D8D8B0F4FDBC5E21D06EFCEB2AD6A50"
+    },
+    {
+      "path": "test\\ledger-diskmon.test.mjs",
+      "bytes": 15398,
+      "sha256": "4605A10A03BD71E272335C30DEDE06F81F6BAB0082CD588A5772FC186B2E4EBC"
+    },
+    {
+      "path": "test\\minimal-trace.jsonl",
+      "bytes": 256,
+      "sha256": "63E22B0DB0FAEFDA6AD1B6F72DD70B7C939B21472116D01377003AD5A33DDCC7"
+    },
+    {
+      "path": "test\\model.test.mjs",
+      "bytes": 6505,
+      "sha256": "F59FEBA4D42457B0CC635ACBA73B42D77D27C3C7660AD1D6D3F9EE1C908E9820"
+    },
+    {
+      "path": "test\\protocol-advice.test.mjs",
+      "bytes": 979,
+      "sha256": "5B19A17DD5C7D7223D236DF8096757F87921472403C6C11E5924B4C57A9A5DB8"
+    },
+    {
+      "path": "test\\score-helpers.test.mjs",
+      "bytes": 745,
+      "sha256": "8D7B5712A0932212B95FF3788E91FA847996C968AB9FD621D58E872E9B6C3B66"
+    },
+    {
+      "path": "test\\state-submit-bohr.test.mjs",
+      "bytes": 10123,
+      "sha256": "533201777B8D4BB3D53C02854B1088303A325536BE71A48C5591FED338E08306"
+    },
+    {
+      "path": "test\\submit-concurrency.test.mjs",
+      "bytes": 5046,
+      "sha256": "A371A613B0541474BE188E24D9582225E1F8E985D788A5D69248E915D803FEEC"
+    },
+    {
+      "path": "test\\submit-gates-protocol.test.mjs",
+      "bytes": 7614,
+      "sha256": "3486EB483DE94968D75F9DD92053D831E55D12A271FE5FA4DEBEB98AEC6E7F7A"
+    },
+    {
+      "path": "test\\trace-redline.test.mjs",
+      "bytes": 14784,
+      "sha256": "287EBDB3A695D6629DFEC402F96EC048EBE5DA648CDF514B023447876F7FB44F"
+    },
+    {
+      "path": "test\\workspace.test.mjs",
+      "bytes": 1739,
+      "sha256": "01E3D10D44977C5F6A8979BAC62983CC0570987502A5F7BE89B5FDB49E1680D6"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+# Windows 版极简模式：基于 shipped `minimal` preset 复制并修正。
+# 1) terminal-bash 的 shellPath 指向本机 Git Bash（默认 /bin/bash 在
+#    Windows 上不是有效路径）；
+# 2) persistent-shell 组内沙箱策略固定为 danger-full-access：Git Bash
+#    （MSYS）在 workspace-write 的受限令牌下无法初始化信号管道
+#    （cygheap/ACL），shell 必须运行在非受限令牌下。
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are a helpful software engineer assistant.
+    complete: true
+    includeRuntimeContext: false
+
+- id: persistent-shell
+  name: cordis:group
+  group: true
+  isolate:
+    terminals: true
+    sandboxPolicy: true
+  config:
+    - id: pty
+      name: '@deepseek-ai/dsh-terminal'
+
+    - id: sandbox-policy
+      name: '@deepseek-ai/dsh-sandbox-policy'
+      config:
+        mode: danger-full-access
+        workspaceRoot: !!js process.env.DSH_CWD ?? process.cwd()
+
+    - id: terminal-bash
+      name: '@deepseek-ai/dsh-terminal-bash'
+      config:
+        timeoutMs: 300000
+        shellPath: 'C:\Program Files\Git\bin\bash.exe'
+        shellArgs: ['--noprofile', '--norc', '-i']
+
+    - id: persistent-bash
+      name: '@deepseek-ai/dsh-tool-bash-persistent'
+      config:
+        timeoutMs: 300000
+        description: |-
+          Run commands in a bash shell (Git Bash on Windows)
+          * This shell runs unconfined (danger-full-access): no file sandbox on shell commands.
+          * State is persistent across command calls and discussions with the user.
+
+- id: filesystem
+  name: cordis:group
+  group: true
+  isolate:
+    fs: true
+  config:
+    - id: fs-local
+      name: '@deepseek-ai/dsh-fs-local'
+      config:
+        cwd: !!js process.env.DSH_CWD ?? process.cwd()
+
+    - id: str-replace-editor
+      name: '@deepseek-ai/dsh-tool-str-replace-editor'
+      config:
+        maxOutputChars: 16000

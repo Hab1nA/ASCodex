@@ -1,0 +1,884 @@
+ID: estimate-a-finite-horizon-competing-poisoning-bala-c38a0ad7
+TITLE: Estimate a finite-horizon competing-poisoning balance from lattice KMC and test monometallic and checkerboard effective-supply predictions on holdouts.
+status=closed diff=1 disc=materials attempts=223
+roundEndAt=2026-08-01T00:00:00+00:00 tags=['Agentic Science Challenge', 's4', 'round-1']
+
+================================================================================
+SCORING
+================================================================================
+
+--- characterization_schema ---
+/api/schemas/characterization/v1
+
+--- expected_metrics ---
+[]
+
+--- formula_summary ---
+No per-challenge grader registered. Score derives from characterization.deviations_from_paper in the ARM bundle. SSIM contributions to result_fidelity are capped at 0.3.
+
+--- grader_name ---
+None
+
+--- protocol_url ---
+/api/protocol
+
+--- score_range ---
+[
+ 0,
+ 100
+]
+
+--- strategy ---
+arm_v1_1_generic
+
+================================================================================
+CONTENT (topicContent/content)
+================================================================================
+# Infer a finite-horizon poisoning balance from catalytic-lattice KMC
+
+## Scientific background
+
+Consider the irreversible surface reaction
+
+```text
+A(g) + B(g) → AB(g).
+```
+
+The gas reservoir has fixed composition: `X_A` is the mole fraction of A and
+`1-X_A` is the mole fraction of B. These are reservoir fractions, not surface
+coverages. The surface fractions are `theta_A`, `theta_B`, and `theta_empty`.
+
+Adsorption occurs only after an impact on an empty site and then only with the
+species- and material-dependent sticking probability. Neighbouring unlike
+adsorbates react and desorb immediately. Unequal effective adsorption supplies
+therefore shift the competition between an absorbing A-covered surface and an
+absorbing B-covered surface.
+
+On a finite stochastic lattice, a trajectory can remain reactive for a long
+time and still poison later. Survival to the requested horizon is
+right-censoring, not evidence of an eternal steady state.
+
+Your task is to estimate a finite-horizon A/B poisoning balance from genuine
+stochastic simulation, test effective-supply predictions on monometallic and
+checkerboard-bimetallic surfaces, and assess one matched finite-size
+comparison. The problem is self-contained; no source paper is required.
+
+## Input contract and visible instance
+
+Your submission must implement the executable interface specified below. For
+the visible run, materialize the exact JSON instance embedded in this
+instruction and pass its path as `INPUT_JSON`. Its top-level `cases` list is in
+authoritative input order. The top-level `bootstrap_replicates` is the
+requested resample count when you choose a bootstrap estimator. Every case
+supplies:
+
+- `case_id`, `execution_class`, `surface_type`;
+- `lattice_size=L`, `max_cycles=T`, `late_window_cycles`, and
+  `record_cycles`;
+- a `parameters` object;
+- an ordered `x_a_grid`;
+- `seed_base`, `replicates`, and `bootstrap_seed`;
+- `prediction_split`, equal to `fit`, `holdout`, or `gate`;
+- optional `anchor_group` and `label_exchange_group`.
+
+For composition index `x_index` in the input `x_a_grid` and zero-based
+`replicate_index`, the trajectory seed is exactly
+
+```text
+seed = seed_base + 1000*x_index + replicate_index.
+```
+
+Run every requested `(case, X_A, seed)` once. Do not sort the grid before
+deriving seeds. All trajectories must use
+`numpy.random.Generator(numpy.random.PCG64(seed))`; production is compared
+statistically, while canaries are replayed exactly. If your uncertainty method
+uses stochastic resampling, seed it with the case's `bootstrap_seed`.
+The guaranteed runtime is Python 3.10 with NumPy 2.1.3.
+
+The universal checker will freeze your entry point and invoke it once with an
+undisclosed JSON instance that follows exactly the same schema but contains
+different case IDs and parameter values. Do not hard-code visible case IDs,
+case order, grids, parameters, row counts, or expected numerical results.
+
+### Visible input
+
+```json
+{
+  "schema_version": "2.0",
+  "bootstrap_replicates": 300,
+  "cases": [
+    {
+      "case_id": "public-kernel-canary",
+      "study_role": "event_kernel_gate",
+      "prediction_split": "gate",
+      "execution_class": "deterministic_canary",
+      "surface_type": "monometallic",
+      "lattice_size": 4,
+      "max_cycles": 4,
+      "late_window_cycles": 2,
+      "record_cycles": [
+        1,
+        2,
+        4
+      ],
+      "parameters": {
+        "s_a": 0.6,
+        "s_b": 0.4
+      },
+      "x_a_grid": [
+        0.5
+      ],
+      "seed_base": 202607280000,
+      "replicates": 1,
+      "bootstrap_seed": 902607280001,
+      "anchor_group": null
+    },
+    {
+      "case_id": "public-mono-size-small",
+      "study_role": "monometallic_fit_and_size_anchor",
+      "prediction_split": "fit",
+      "execution_class": "statistical_production",
+      "surface_type": "monometallic",
+      "lattice_size": 12,
+      "max_cycles": 240,
+      "late_window_cycles": 60,
+      "record_cycles": [
+        1,
+        20,
+        60,
+        120,
+        240
+      ],
+      "parameters": {
+        "s_a": 0.5,
+        "s_b": 0.5
+      },
+      "x_a_grid": [
+        0.15,
+        0.25,
+        0.35,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85
+      ],
+      "seed_base": 202608010000,
+      "replicates": 10,
+      "bootstrap_seed": 902608010001,
+      "anchor_group": "public-mono-size"
+    },
+    {
+      "case_id": "public-mono-size-large",
+      "study_role": "monometallic_fit_and_size_anchor",
+      "prediction_split": "fit",
+      "execution_class": "statistical_production",
+      "surface_type": "monometallic",
+      "lattice_size": 18,
+      "max_cycles": 240,
+      "late_window_cycles": 60,
+      "record_cycles": [
+        1,
+        20,
+        60,
+        120,
+        240
+      ],
+      "parameters": {
+        "s_a": 0.5,
+        "s_b": 0.5
+      },
+      "x_a_grid": [
+        0.15,
+        0.25,
+        0.35,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85
+      ],
+      "seed_base": 202608020000,
+      "replicates": 10,
+      "bootstrap_seed": 902608020001,
+      "anchor_group": "public-mono-size"
+    },
+    {
+      "case_id": "public-mono-a-strong",
+      "study_role": "monometallic_fit",
+      "prediction_split": "fit",
+      "execution_class": "statistical_production",
+      "surface_type": "monometallic",
+      "lattice_size": 18,
+      "max_cycles": 240,
+      "late_window_cycles": 60,
+      "record_cycles": [
+        1,
+        20,
+        60,
+        120,
+        240
+      ],
+      "parameters": {
+        "s_a": 0.7,
+        "s_b": 0.3
+      },
+      "x_a_grid": [
+        0.15,
+        0.25,
+        0.35,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85
+      ],
+      "seed_base": 202608030000,
+      "replicates": 10,
+      "bootstrap_seed": 902608030001,
+      "anchor_group": null
+    },
+    {
+      "case_id": "public-mono-b-strong",
+      "study_role": "monometallic_fit",
+      "prediction_split": "fit",
+      "execution_class": "statistical_production",
+      "surface_type": "monometallic",
+      "lattice_size": 18,
+      "max_cycles": 240,
+      "late_window_cycles": 60,
+      "record_cycles": [
+        1,
+        20,
+        60,
+        120,
+        240
+      ],
+      "parameters": {
+        "s_a": 0.3,
+        "s_b": 0.7
+      },
+      "x_a_grid": [
+        0.15,
+        0.25,
+        0.35,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85
+      ],
+      "seed_base": 202608040000,
+      "replicates": 10,
+      "bootstrap_seed": 902608040001,
+      "anchor_group": null
+    },
+    {
+      "case_id": "public-bimetal-train-upper",
+      "study_role": "bimetallic_fit",
+      "prediction_split": "fit",
+      "execution_class": "statistical_production",
+      "surface_type": "bimetallic",
+      "lattice_size": 18,
+      "max_cycles": 240,
+      "late_window_cycles": 60,
+      "record_cycles": [
+        1,
+        20,
+        60,
+        120,
+        240
+      ],
+      "parameters": {
+        "s_aa": 0.3,
+        "s_bb": 0.6
+      },
+      "x_a_grid": [
+        0.15,
+        0.25,
+        0.35,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85
+      ],
+      "seed_base": 202608050000,
+      "replicates": 10,
+      "bootstrap_seed": 902608050001,
+      "anchor_group": null
+    },
+    {
+      "case_id": "public-bimetal-train-lower",
+      "study_role": "bimetallic_fit",
+      "prediction_split": "fit",
+      "execution_class": "statistical_production",
+      "surface_type": "bimetallic",
+      "lattice_size": 18,
+      "max_cycles": 240,
+      "late_window_cycles": 60,
+      "record_cycles": [
+        1,
+        20,
+        60,
+        120,
+        240
+      ],
+      "parameters": {
+        "s_aa": 0.6,
+        "s_bb": 0.3
+      },
+      "x_a_grid": [
+        0.15,
+        0.25,
+        0.35,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85
+      ],
+      "seed_base": 202608060000,
+      "replicates": 10,
+      "bootstrap_seed": 902608060001,
+      "anchor_group": null
+    },
+    {
+      "case_id": "public-bimetal-homogeneous",
+      "study_role": "bimetallic_fit_and_homogeneous_limit",
+      "prediction_split": "fit",
+      "execution_class": "statistical_production",
+      "surface_type": "bimetallic",
+      "lattice_size": 18,
+      "max_cycles": 240,
+      "late_window_cycles": 60,
+      "record_cycles": [
+        1,
+        20,
+        60,
+        120,
+        240
+      ],
+      "parameters": {
+        "s_aa": 0.7,
+        "s_bb": 0.3
+      },
+      "x_a_grid": [
+        0.15,
+        0.25,
+        0.35,
+        0.45,
+        0.55,
+        0.65,
+        0.75,
+        0.85
+      ],
+      "seed_base": 202608070000,
+      "replicates": 10,
+      "bootstrap_seed": 902608070001,
+      "anchor_group": null
+    }
+  ]
+}
+```
+
+## Frozen microscopic model
+
+The surface is an initially empty periodic `L×L` square lattice. A site is
+encoded as empty, A, or B. One Monte Carlo cycle is `L²` impact attempts.
+
+For each impact:
+
+1. Draw one site uniformly from all `L²` sites.
+2. If it is occupied, end the impact without drawing a species or sticking
+   variate.
+3. At an empty site, draw A with probability `X_A`, otherwise B. Count this as
+   an A or B arrival.
+4. Draw adsorption acceptance using the chosen species' sticking probability
+   on that fixed site type. Count a successful acceptance as an adsorption.
+5. After adsorption, enumerate unlike axial neighbours in the order left,
+   right, up, down, with periodic wrapping.
+6. If at least one unlike neighbour exists, choose one uniformly, remove it
+   and the new adsorbate, and count exactly one reaction. If there is exactly
+   one unlike neighbour, select it without another random draw.
+
+For a monometallic surface the coefficients are `s_a` for A and `s_b` for B.
+
+For a bimetallic surface, `L` is even. Site `a` has
+`(row+column) mod 2 == 0`; site `b` has odd parity. In `s_ij`, the first
+subscript is adsorbing species and the second is site type:
+
+```text
+             site a          site b
+species A      s_aa       s_ab = 1-s_bb
+species B  s_ba = 1-s_aa      s_bb
+```
+
+This checkerboard and complementarity are assumptions of this task, not a
+universal catalyst law.
+
+The lattice poisons immediately when an impact leaves all sites occupied by
+one species. Stop that trajectory at once. If poisoning occurs on the `k`-th
+impact of one-based cycle `c`, record
+
+```text
+poisoning_cycle = completed_cycles = (c-1) + k/L².
+```
+
+An unpoisoned run stops after cycle `T`, with `completed_cycles=T`.
+
+## Observables and units
+
+Use the following canonical categories:
+
+- `poison_species`: `A`, `B`, or the empty string for a censored run;
+- `state`: `active`, `right_censored`, `poisoned_a`, or `poisoned_b`;
+- `balance_status`: `resolved` or `unresolved`;
+- booleans: JSON/CSV boolean values such as `true` and `false`.
+
+`time_series.csv` must contain the end-of-cycle state for each requested
+`record_cycles` value that the trajectory reaches. Always include the terminal
+row: cycle `T` for a survivor or the fractional poisoning time for a poisoned
+run, even when that time was not requested. Do not add synthetic rows after
+poisoning. If the previous emitted time is `t_0`, define
+
+```text
+window_reaction_rate
+  = reactions accumulated on (t_0,t] / (L² * (t-t_0)).
+```
+
+`late_reaction_rate` uses the last
+`min(late_window_cycles, number of reached cycle slices)` slices, including a
+final fractional slice, and is total reactions divided by `L²` times their
+total duration. Both rates therefore have units reactions per site per Monte
+Carlo cycle.
+
+At each `X_A`, aggregate the seed outcomes as follows:
+
+```text
+p_a_poisoned       = n_A / n
+p_b_poisoned       = n_B / n
+d_poisoning        = (n_A - n_B) / n
+survival_probability = n_censored / n
+restricted_mean_lifetime = mean(min(poisoning_cycle, T)).
+```
+
+`se_d_poisoning` is the ordinary sample standard error of outcome codes
+`+1` (A poison), `-1` (B poison), and `0` (censored). Other `se_*` fields are
+ordinary sample standard errors of the named seed-level quantities. Use an
+explicit justified 95% interval for survival (Wilson is acceptable) and for
+the balance.
+
+For a canary checkpoint, set `state_sha256` to the SHA-256 of the row-major
+lattice bytes after encoding empty/A/B as unsigned bytes `0/1/2`; write
+lowercase hexadecimal.
+`checkpoints.csv` contains one row for each emitted deterministic-canary
+time-series row in the supplied input. Statistical-production cases do not
+produce checkpoint rows.
+
+## Scientific estimand
+
+For fixed `L`, horizon `T`, and composition `x`, define
+
+```text
+D_L,T(x)
+  = P(A-poisoned by T | X_A=x)
+  - P(B-poisoned by T | X_A=x).
+```
+
+The simulation-derived apparent balance is a negative-to-positive crossing of
+`D_L,T(x)=0`. Estimate it from the independent outcomes and give an uncertainty
+interval. You may use bootstrap plus monotone regression, a binomial model, or
+another justified method. Report `bracket_low` and `bracket_high` as simulated
+compositions supporting the crossing. `x_grid_resolution` is the minimum
+positive spacing in the case's sorted grid.
+
+If the observed outcomes do not support a crossing, report `unresolved` and
+leave the simulated balance, its interval, bracket, and every corresponding
+prediction residual blank. Never substitute a theoretical value. Survival and
+late reaction activity are required diagnostics, not alternative definitions
+of the balance. For tied diagnostic maxima, use the smallest `X_A`.
+
+## Research questions
+
+### 1. Monometallic effective supply
+
+Start from
+
+```text
+J_A proportional to X_A s_a
+J_B proportional to (1-X_A) s_b.
+```
+
+Derive a balance hypothesis by equating the supplies. Compare it with the
+simulation-derived balances for symmetric and asymmetric sticking pairs and
+explain the direction of the shift and finite-horizon limitations.
+
+### 2. Checkerboard bimetallic model
+
+Construct and freeze before interpreting holdouts:
+
+- a simple one-channel, pooled-site, or mean-sticking baseline; and
+- a site-resolved effective-supply prediction that respects the two
+  sublattices and the four sticking channels above.
+
+The final site-resolved formula is deliberately not supplied. Deriving a
+physically consistent rule and using it on unseen parameter combinations is
+part of the research task. For every bimetallic case, report both predictions,
+compare their residuals, and test:
+
+- label exchange: paired cases sharing `label_exchange_group` must transform
+  consistently under A/B exchange;
+- homogeneous limit: when `s_aa+s_bb=1`, both site types present the same
+  sticking coefficient to each species.
+
+### 3. Matched finite-size robustness
+
+Cases sharing an `anchor_group` form a matched comparison. Sticking
+parameters, horizon, grid, and replicate count are fixed; only `L` changes.
+Compare estimates and intervals without claiming a thermodynamic-limit
+extrapolation.
+
+## Structured prediction conventions
+
+Use one `model_predictions.csv` row per required model and production case:
+
+- monometallic: `prediction_role=primary`;
+- bimetallic simple model: `prediction_role=baseline`;
+- bimetallic sublattice model: `prediction_role=site_resolved`.
+
+Copy `prediction_split` to `fit_or_holdout`. Set
+`residual = x_balance_simulated - x_balance_predicted`. Use
+`pass`, `fail`, or `not_applicable` for the two check columns. Model IDs and
+parameter summaries are descriptive and may use your own names.
+
+## Submission interface
+
+Create an executable
+
+```text
+/app/run_submission.sh INPUT_JSON OUTPUT_DIR
+```
+
+that works from any current directory and writes:
+
+- `time_series.csv`
+- `run_statistics.csv`
+- `scan_statistics.csv`
+- `balance_estimates.csv`
+- `model_predictions.csv`
+- `checkpoints.csv`
+- `run_manifest.json`
+- `scientific_report.md`
+
+For the visible run, save the embedded JSON exactly (for example as
+`/app/inputs/cases.json`) and execute:
+
+```bash
+mkdir -p /app/outputs
+/app/run_submission.sh /app/inputs/cases.json /app/outputs
+```
+
+The checker will use a different input path and a fresh output directory, so
+the entry point must honor both arguments and must not depend on the current
+directory or pre-existing visible outputs.
+
+The exact columns and machine-readable output contract are embedded in the
+Self-check section below.
+
+In `run_manifest.json`, use `kmc-catalytic-sticking-v004` as `task_id`;
+`input_sha256` is the SHA-256 of the exact input bytes; `code_sha256` is the
+SHA-256 of the primary executable source invoked by the entry point;
+`seed_count` is the number of trajectory rows; and `output_sha256` maps every
+non-manifest deliverable above to the SHA-256 of its exact final bytes. Record
+the Python, NumPy, and platform runtime and the RNG and seed policy. Hashes are
+lowercase hexadecimal.
+
+## Deterministic canary gate
+
+Cases marked `deterministic_canary` are an unscored event-kernel eligibility
+gate. Each required variate is the next scalar `rng.random()`. Map a site draw
+as `floor(u L²)`, choose A when `u<X_A`, accept when `u<S`, and select neighbour
+`floor(u n_unlike)` in the stated enumeration. The no-draw branches above are
+load-bearing. Production trajectories are not compared bitwise.
+
+## Scientific report
+
+`scientific_report.md` must contain:
+
+- Research question
+- Model and estimator
+- Monometallic theory and results
+- Bimetallic model comparison
+- Finite-size robustness
+- Uncertainty and unresolved cases
+- Limitations
+
+The report explains the structured evidence but cannot replace it. A
+formula-only answer, a prediction relabelled as simulation, duplicated
+trajectories, or a finite survivor labelled permanently reactive is invalid.
+
+## Self-check before finishing (optional, not scored)
+
+A machine-readable copy of the output contract is below. Before you finish,
+write and run a small script that checks every file under `/app/outputs`
+against it: each declared file exists, JSON objects contain the required keys,
+CSV files contain the required columns, and the report contains the required
+sections. Fix any mismatch before finishing.
+
+This checks **SHAPE ONLY**. It does not judge scientific correctness, and
+passing it does not mean your answer is correct.
+
+```json
+{
+  "outputs": [
+    {
+      "file": "time_series.csv",
+      "format": "csv",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "table",
+        "required_columns": [
+          "case_id",
+          "surface_type",
+          "lattice_size",
+          "x_a",
+          "seed",
+          "cycle",
+          "theta_a",
+          "theta_b",
+          "theta_empty",
+          "empty_site_hits",
+          "a_arrivals",
+          "b_arrivals",
+          "a_adsorptions",
+          "b_adsorptions",
+          "cumulative_reactions",
+          "window_reaction_rate",
+          "state"
+        ],
+        "units": {}
+      },
+      "description": "Emit reached requested end-of-cycle rows plus the terminal max-cycle or fractional poison row. Do not emit post-poison rows."
+    },
+    {
+      "file": "run_statistics.csv",
+      "format": "csv",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "table",
+        "required_columns": [
+          "case_id",
+          "execution_class",
+          "surface_type",
+          "lattice_size",
+          "max_cycles",
+          "x_a",
+          "seed",
+          "poisoned",
+          "poison_species",
+          "poisoning_cycle",
+          "right_censored",
+          "completed_cycles",
+          "site_attempts",
+          "empty_site_hits",
+          "a_arrivals",
+          "b_arrivals",
+          "a_adsorptions",
+          "b_adsorptions",
+          "total_reactions",
+          "late_reaction_rate",
+          "final_a_fraction",
+          "final_b_fraction",
+          "final_empty_fraction",
+          "rng_draw_count"
+        ],
+        "units": {}
+      },
+      "description": "Exactly one row per requested case, x_a, and derived seed."
+    },
+    {
+      "file": "scan_statistics.csv",
+      "format": "csv",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "table",
+        "required_columns": [
+          "case_id",
+          "surface_type",
+          "lattice_size",
+          "max_cycles",
+          "x_a",
+          "runs",
+          "a_poisoned",
+          "b_poisoned",
+          "right_censored",
+          "p_a_poisoned",
+          "p_b_poisoned",
+          "d_poisoning",
+          "se_d_poisoning",
+          "survival_probability",
+          "survival_ci_low",
+          "survival_ci_high",
+          "restricted_mean_lifetime",
+          "mean_late_reaction_rate",
+          "se_late_reaction_rate",
+          "mean_final_a_fraction",
+          "mean_final_b_fraction",
+          "mean_final_empty_fraction"
+        ],
+        "units": {}
+      },
+      "description": "Exactly one row per statistical_production case and x_a; deterministic canaries do not appear."
+    },
+    {
+      "file": "balance_estimates.csv",
+      "format": "csv",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "table",
+        "required_columns": [
+          "case_id",
+          "surface_type",
+          "lattice_size",
+          "max_cycles",
+          "estimator",
+          "balance_status",
+          "x_balance_simulated",
+          "x_balance_ci_low",
+          "x_balance_ci_high",
+          "x_grid_resolution",
+          "bracket_low",
+          "bracket_high",
+          "x_survival_peak",
+          "x_activity_peak",
+          "limitations"
+        ],
+        "units": {}
+      },
+      "description": "Exactly one row per statistical_production case."
+    },
+    {
+      "file": "model_predictions.csv",
+      "format": "csv",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "table",
+        "required_columns": [
+          "model_id",
+          "prediction_role",
+          "surface_type",
+          "case_id",
+          "parameter_summary",
+          "x_balance_simulated",
+          "x_balance_predicted",
+          "residual",
+          "fit_or_holdout",
+          "label_exchange_check",
+          "homogeneous_limit_check"
+        ],
+        "units": {}
+      },
+      "description": "One primary row per monometallic production case and baseline plus site_resolved rows per bimetallic production case."
+    },
+    {
+      "file": "checkpoints.csv",
+      "format": "csv",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "table",
+        "required_columns": [
+          "case_id",
+          "execution_class",
+          "x_a",
+          "seed",
+          "cycle",
+          "a_count",
+          "b_count",
+          "empty_count",
+          "cumulative_reactions",
+          "rng_draw_count",
+          "state_sha256"
+        ],
+        "units": {}
+      },
+      "description": "One row per emitted deterministic-canary time-series row. If an input contains no deterministic-canary cases, emit the header only."
+    },
+    {
+      "file": "run_manifest.json",
+      "format": "json",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "object",
+        "required_keys": [
+          "task_id",
+          "input_sha256",
+          "code_sha256",
+          "rng",
+          "seed_count",
+          "environment",
+          "started_at",
+          "finished_at",
+          "output_sha256"
+        ]
+      },
+      "description": "Execution provenance, seed policy, environment, and exact input/code/output hashes."
+    },
+    {
+      "file": "scientific_report.md",
+      "format": "markdown",
+      "purpose": "scored",
+      "target_policy": "custom",
+      "schema": {
+        "type": "document",
+        "required_sections": [
+          "Research question",
+          "Model and estimator",
+          "Monometallic theory and results",
+          "Bimetallic model comparison",
+          "Finite-size robustness",
+          "Uncertainty and unresolved cases",
+          "Limitations"
+        ]
+      },
+      "description": "Scientific interpretation of the structured simulation evidence; it does not replace the CSV and JSON outputs."
+    }
+  ],
+  "notes": "This self-check covers shape only: files, required keys, required columns, and required report sections. Scientific correctness is scored only by the universal checker."
+}
+```
+
+## How you are scored
+
+The checker first validates the frozen entry point, output contract, and
+deterministic PCG64 event-kernel checkpoints on the undisclosed mixed input. A
+failed eligibility gate receives reward `0`. `run_manifest.json` must exist,
+parse as JSON, and contain its required keys, but value-level provenance
+mismatches (for example an incorrect or incomplete declared hash) are a soft
+penalty inside trajectory validity rather than an automatic zero.
+
+Eligible submissions receive four equally weighted continuous component
+scores:
+
+- trajectory validity and cross-file scientific accounting: 25%;
+- statistical poisoning, survival, and activity outcomes: 25%;
+- simulation-supported balance estimation and uncertainty: 25%;
+- monometallic/bimetallic theory, holdouts, limits, and size robustness: 25%.
+
+The layers are evidence-linked. Statistical outcomes and simulated balance
+claims receive credit only when the submitted production trajectories support
+their case/seed coverage, accounting, time series, and recomputed aggregates.
+Analytical theory may receive limited standalone credit, but its residual,
+holdout, and robustness claims must be grounded in the submitted simulation.
+Correct canary replay by itself is therefore not sufficient for a high score.
+
+Large-scale production results are compared statistically with independent
+reference ensembles. They are not required to replay a single reference
+trajectory bit for bit.

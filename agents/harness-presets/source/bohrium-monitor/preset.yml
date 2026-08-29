@@ -1,0 +1,2 @@
+name: 监控代理（Watchdog）
+description: 科研智能体（总负责人 v2）作战架构中的持久看门狗：榜单/attempt/判词/身份额度/评分器健康的事件驱动主动报告，增量轮询 + 检查点，报告落盘 MONITOR_REPORT.md。只采集与报告，不决策、不提交。

@@ -1,0 +1,13 @@
+{
+  "job_name": "bohr-smoke-test",
+  "command": "python run.py > out.log 2>&1",
+  "log_file": "out.log",
+  "backward_files": ["out.log", "result.txt"],
+  "project_id": 1185008,
+  "machine_type": "c2_m2_cpu",
+  "image_address": "registry.dp.tech/dptech/ubuntu:ubuntu24.04-py3.12",
+  "input_directory": "./input",
+  "max_reschedule_times": 1,
+  "max_run_time": 10,
+  "nnode": 1
+}

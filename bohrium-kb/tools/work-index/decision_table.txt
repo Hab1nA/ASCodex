@@ -1,0 +1,120 @@
+====================================================================================================
+ID:     estimate-a-finite-horizon-competing-poisoning-bala-c38a0ad7
+TITLE:  Estimate a finite-horizon competing-poisoning balance from lattice KMC and test monometallic and checkerboard effective-supply predictions on holdouts.
+diff=1  disc=materials  attempts=223  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     convergence-and-efficiency-of-two-phase-and-shock-3b75bda5
+TITLE:  Convergence and Efficiency of Two-Phase and Shock-Melting Methods for Gold
+diff=1  disc=computational-thermodynamics  attempts=219  stars=0  status=open
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-08T12:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-2']
+====================================================================================================
+ID:     monte-carlo-simulation-of-liquid-chloroform-using-e0469f30
+TITLE:  Monte Carlo simulation of liquid chloroform using a single-center Stockmaier potential
+diff=4  disc=materials  attempts=219  stars=1  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: Liquid chloroform (CHCl₃) is a polar solvent whose thermodynamic and structural properties can be predicted by Monte Carlo simulation if an accurate intermolecular potential is available. The goal is to reproduce the main computational experiment that computes these properties using a simplified single-center potential, to verify that the simulation can match experimental data.
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     md-simulation-of-repulsive-dislocation-intersectio-32d14849-2
+TITLE:  MD Simulation of Repulsive Dislocation Intersection in Copper
+diff=4  disc=materials  attempts=208  stars=0  status=open
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-08T12:00:00+00:00
+ABSTRA: Molecular dynamics simulation of repulsive dislocation intersection in copper using a large nonperiodic fcc cell. Requires crystallographic reconstruction of extended dislocations, line-sense-aware Burgers-vector reactions, and trajectory-based junction, jog, and passage analysis.
+tags: ['Agentic Science Challenge', 's4', 'round-2']
+====================================================================================================
+ID:     multi-band-electron-phonon-coupling-and-transition-2c57551c
+TITLE:  Multi-band electron-phonon coupling and transition temperature analysis in doped SrTiO₃
+diff=3  disc=physics  attempts=193  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: Electron-doped SrTiO₃ is unusual among superconductors because its superconducting phase extends to carrier concentrations as low as \(5.5\times10^{17}\,\mathrm{cm}^{-3}\). In this dilute regime, the Fermi energy is comparable to only a few millielectronvolts and lies below the relevant longitudinal-optical-phonon energies. The pairing problem therefore falls in a nonadiabatic regime, where the us
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     ground-state-shell-occupations-and-fbd-universal-3-2e27dc1a
+TITLE:  Ground-state shell occupations and FBD universal-3 binding energies for 55-atom Cu-Ni and Cu-Pd icosahedral/cuboctahedral clusters.
+diff=3  disc=materials  attempts=176  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: Bimetallic clusters of transition and noble metals show surface segregation and chemical ordering that control catalytic and materials behaviour. Following the scientific programme of Montejano-Carrizales et al., Phys. Rev. B 49, 16649 (1994), this task asks you to locate low-temperature ground-state *shell occupations* of ideal 55-atom icosahedral and cuboctahedral Cu–Ni and Cu–Pd clusters with t
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     spatial-domain-identification-via-graph-informed-c-35985da3-2
+TITLE:  Spatial domain identification via graph-informed contrastive learning (12-slice DLPFC reproduction)
+diff=4  disc=biology  attempts=174  stars=2  status=open
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: Spatial transcriptomics technologies measure gene expression across thousands of genes while preserving the spatial locations of the measurement spots within a tissue slice. A fundamental analysis task is to partition these spots into spatial domains — contiguous regions that share consistent gene expression profiles and histological characteristics. Accurate spatial domain identification reveals 
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     signed-multi-orientation-tdgl-grain-growth-cbc790a3
+TITLE:  Signed Multi-orientation TDGL Grain Growth
+diff=1  disc=crystal-growth-modeling  attempts=143  stars=0  status=open
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-08T12:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-2']
+====================================================================================================
+ID:     faithful-determinant-free-nn-vmc-reproduction-of-t-8d0d6b46
+TITLE:  Faithful determinant-free NN-VMC reproduction of the 4x4 Hubbard benchmark
+diff=4  disc=physics  attempts=128  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: Koji Inui, Yasuyuki Kato, and Yukitoshi Motome
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     closed-book-four-fermion-three-body-decay-helicity-77fef58e
+TITLE:  Closed-book: four-fermion three-body decay helicity amplitudes, tripartite entanglement, and Mermin/Svetlichny/tight-4x4x2 Bell optimization with a checkpointed analytic derivation and a general hidden-input solver
+diff=4  disc=physics  attempts=123  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: A massive spin-1/2 fermion $X$ decays at rest into three massless fermions, $X\to A+B+C$, where $A$ and $C$ are outgoing fermions and $B$ is an outgoing antifermion. At a fixed phase-space point the decay produces a pure three-qubit state in the helicity basis of the three final particles. The structure of that state — and therefore its multipartite entanglement and its ability to violate triparti
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     dft-crystal-structure-formation-energy-and-charge-730d57d3
+TITLE:  DFT crystal structure, formation energy and charge transfer in LiSi (ABACUS)
+diff=1  disc=density-functional-theory  attempts=117  stars=0  status=open
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-08T12:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-2']
+====================================================================================================
+ID:     site-projected-magnetic-moments-and-spin-state-ass-9640ab85
+TITLE:  Site-projected magnetic moments and spin-state assignment in Ca3Co2O6 (ABACUS)
+diff=1  disc=condensed-matter-magnetism  attempts=100  stars=0  status=open
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-08T12:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-2']
+====================================================================================================
+ID:     find-an-exactly-verifiable-counterexample-to-edge-7141d3ed
+TITLE:  Find an exactly verifiable counterexample to edge negative correlation in a positively weighted random-forest measure.
+diff=4  disc=math  attempts=35  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     find-an-exact-binary-answer-monogamy-of-entangleme-55ab0d77
+TITLE:  Find an exact binary-answer monogamy-of-entanglement game with a certified entangled advantage.
+diff=4  disc=math  attempts=33  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-1']
+====================================================================================================
+ID:     find-a-rigorously-certified-finite-counterexample-45966214
+TITLE:  Find a rigorously certified finite counterexample to invariant-observable Griffiths positivity for an O(n) rotor model.
+diff=4  disc=math  attempts=32  stars=0  status=closed
+scoring keys: ['characterization_schema', 'expected_metrics', 'formula_summary', 'grader_name', 'protocol_url', 'score_range', 'strategy']
+round: seq=None end=2026-08-01T00:00:00+00:00
+ABSTRA: 
+tags: ['Agentic Science Challenge', 's4', 'round-1']

@@ -1,0 +1,60 @@
+coupled-1d-rotary-cement-kiln-model-validation-par-a7fbab39|3|materials|1|Coupled 1D Rotary Cement Kiln Model: Validation, Parametric,
+heat-transfer-and-pressure-drop-trade-off-for-dimp-1249a43b|4|thermal-engineering|1|Heat Transfer and Pressure Drop Trade-off for Dimple Configu
+kinetics-free-moving-bed-coal-gasifier-model-5ed1879d|3|materials|1|Kinetics-Free Moving Bed Coal Gasifier Model
+microchannel-heat-sink-thermal-hydraulic-analysis-b1a976b7|4|thermal-engineering|1|Microchannel Heat Sink Thermal-Hydraulic Analysis via CFD Si
+microchannel-heat-sink-thermal-hydraulic-cfd-analy-ef3b6634|4|fluid-dynamics|0|Microchannel Heat Sink Thermal-Hydraulic CFD Analysis
+microchannel-heat-sink-thermal-hydraulic-trade-off-0f6fca06|3|thermal-engineering|1|Microchannel Heat Sink Thermal-Hydraulic Trade-off Analysis
+non-adiabatic-grain-model-simulation-of-fixed-bed-449dbdca|3|materials|1|Non-Adiabatic Grain Model Simulation of Fixed-Bed Catalyst R
+one-dimensional-semi-empirical-bfb-reactor-model-s-bf8316d1|3|materials|0|One-Dimensional Semi-Empirical BFB Reactor Model Simulation
+cfd-based-model-equivalence-for-honeycomb-pcm-stor-895d0636|4|thermal-energy-storage|1|CFD‑Based Model Equivalence for Honeycomb PCM Storage
+constructal-optimization-of-radial-pattern-disc-co-9f817ba6|3|thermal-engineering|0|Constructal Optimization of Radial-Pattern Disc Cooling with
+flat-plate-oscillating-heat-pipe-thermal-performan-e5a08931|2|thermal-engineering|4|Flat-Plate Oscillating Heat Pipe Thermal Performance Predict
+flow-and-heat-transfer-in-microchannel-with-fan-sh-7c154d77|4|thermal-engineering|0|Flow and Heat Transfer in Microchannel with Fan-Shaped Cavit
+microchannel-heat-sink-optimization-via-analytical-bc12c2f0|3|thermal-engineering|6|Microchannel Heat Sink Optimization via Analytical Model
+microchannel-heat-sink-thermal-hydraulic-compariso-d66a0b8b|4|thermal-engineering|1|Microchannel Heat Sink Thermal-Hydraulic Comparison
+microchannel-heat-sink-thermal-hydraulic-trade-off-51bd134f|4|thermal-engineering|0|Microchannel Heat Sink Thermal-Hydraulic Trade-off Analysis
+microchannel-heat-sink-thermal-hydraulic-trade-off-64ae6925|2|microscale-heat-transfer|3|Microchannel Heat Sink Thermal-Hydraulic Trade-off Analysis
+single-particle-gasification-and-motion-model-in-r-bb3bacaa|4|materials|0|Single-particle gasification and motion model in rotating fl
+counter-flow-microchannel-thermal-variation-cfd-an-006c6574|4|fluid-dynamics|1|Counter-Flow Microchannel Thermal Variation CFD Analysis
+laminar-developing-flow-and-heat-transfer-between-e0b281b3|3|computational-heat-transfer|1|Laminar developing flow and heat transfer between parallel p
+metastable-flow-reversal-in-parallel-channel-natur-f18f3371|3|thermal-hydraulics|1|Metastable Flow Reversal in Parallel Channel Natural Circula
+microchannel-heat-sink-depth-trade-off-analysis-vi-b50eaa86|3|heat-transfer|0|Microchannel Heat Sink Depth Trade-off Analysis via CFD
+microchannel-heat-sink-entropy-generation-minimiza-a0c1f335|2|thermal-engineering|11|Microchannel Heat Sink Entropy Generation Minimization with 
+microchannel-heat-sink-optimization-under-magnetic-6fd27846|4|mechanical-engineering|4|Microchannel Heat Sink Optimization under Magnetic Fields: T
+non-monotonic-nusselt-number-variation-in-trapezoi-325a6f78|3|fluid-dynamics|1|Non-monotonic Nusselt Number Variation in Trapezoidal Channe
+thermal-hydraulic-performance-enhancement-in-solar-5b2e8303|3|solar-thermal-engineering|1|Thermal-Hydraulic Performance Enhancement in Solar Collector
+weighted-taylor-series-water-wave-classification-18e022b3|4|ocean-engineering|1|Weighted Taylor Series Water Wave Classification
+1d-discontinuous-galerkin-solver-for-regularized-b-294e7f2e|3|fluid-dynamics|5|1D Discontinuous Galerkin Solver for Regularized Bingham Vis
+adaptive-growth-simulation-for-heat-conducting-cha-2caec511|3|thermal-engineering|1|Adaptive Growth Simulation for Heat-Conducting Channel Layou
+cfd-based-optimization-of-embedded-vascular-coolin-38d85454|4|thermal-engineering|1|CFD-based optimization of embedded vascular cooling channels
+entropy-glitch-dam-break-simulation-with-positivit-027a116d|4|fluid-dynamics|1|Entropy Glitch Dam Break Simulation with Positivity-Preservi
+maccormack-shallow-water-hydraulic-jump-simulation-a3a13557|2|hydraulic-engineering|2|MacCormack Shallow Water Hydraulic Jump Simulation
+numerical-investigation-of-surface-roughness-effec-16c508d4|4|fluid-dynamics|0|Numerical Investigation of Surface Roughness Effects on Nuss
+reproducing-a-first-order-roe-type-finite-volume-s-21fd8c88|4|fluid-dynamics|1|Reproducing a first-order Roe-type finite volume scheme for 
+well-balanced-finite-volume-scheme-for-mixed-flows-e88de1b4|3|fluid-dynamics|1|Well-balanced finite volume scheme for mixed flows in closed
+1d-tvd-scheme-distortion-parameter-for-dam-break-w-3008cb03|3|computational-hydraulics|1|1D TVD Scheme Distortion Parameter for Dam-Break with MUSCL 
+extended-shallow-water-equation-reflection-coeffic-136016e0|3|fluid-dynamics|0|Extended shallow-water equation: reflection coefficients ove
+finite-difference-weno-scheme-for-shallow-water-eq-e5935ae0|4|fluid-dynamics|3|Finite Difference WENO Scheme for Shallow Water Equations: N
+lax-wendroff-finite-volume-simulations-for-gravity-0877e096|2|fluid-dynamics|10|Lax-Wendroff Finite Volume Simulations for Gravity Wave-Mode
+numerical-simulation-of-oblique-hydraulic-jumps-in-c8c1a129|3|fluid-dynamics|0|Numerical simulation of oblique hydraulic jumps in steady su
+staggered-grid-dam-break-flow-simulation-gauge-tim-300d2a02|3|computational-hydraulics|0|Staggered-grid dam-break flow simulation: gauge time series 
+two-layer-shallow-water-f-wave-solver-with-dry-sta-504c175a|4|ocean-modelling|0|Two-layer shallow water f-wave solver with dry states: conve
+well-balanced-finite-volume-scheme-for-1d-blood-fl-c6e16b9d|3|biomedical-engineering|0|Well-balanced finite volume scheme for 1D blood flow simulat
+well-balanced-positivity-preserving-central-upwind-d847477a|3|fluid-dynamics|0|Well-balanced Positivity-preserving Central-upwind Scheme fo
+approximate-eigenvalue-validation-for-saint-venant-53889bcb|2|hydraulic-engineering|3|Approximate Eigenvalue Validation for Saint-Venant-Exner Sed
+nlsw-wave-overtopping-with-roller-dissipation-for-6f77da4c|4|coastal-engineering|0|NLSW Wave Overtopping with Roller Dissipation for Saville Mo
+numerical-simulation-of-long-wave-breaking-times-u-866b344d|3|ocean-engineering|0|Numerical simulation of long-wave breaking times under botto
+reproduce-verification-errors-for-a-discontinuous-c2fb8478|3|fluid-dynamics|0|Reproduce verification errors for a Discontinuous Galerkin s
+resonant-periods-and-wave-attenuation-in-semi-clos-cd3db302|4|coastal-engineering|0|Resonant periods and wave attenuation in semi-closed basins 
+sgm-finite-volume-solver-for-shallow-water-flows-w-07f14890|2|computational-hydraulics|0|SGM Finite-Volume Solver for Shallow-Water Flows with Variab
+shallow-water-wave-breaking-characteristic-integra-a16a1144|3|fluid-dynamics|0|Shallow water wave breaking: characteristic integration and 
+well-balanced-positivity-preserving-central-scheme-f0de1f78|3|fluid-dynamics|0|Well-balanced positivity-preserving central scheme for open-
+accuracy-test-of-contravariant-c-weno-scheme-for-s-6383e0c4|4|fluid-dynamics|0|Accuracy Test of Contravariant C-WENO Scheme for Shallow-Wat
+boussinesq-term-and-roughness-effect-on-hydraulic-002121d8|3|computational-hydraulics|0|Boussinesq term and roughness effect on hydraulic jump profi
+computation-of-local-slip-length-profiles-and-effe-2bb236c4|3|fluid-dynamics|0|Computation of Local Slip Length Profiles and Effective Slip
+fluid-structure-interaction-turek-hron-benchmark-f-73da7ad6|4|fluid-dynamics|0|Fluid-structure interaction: Turek-Hron benchmark flow-induc
+lagrangian-fem-for-newtonian-free-surface-flows-wi-00e34d71|4|fluid-dynamics|0|Lagrangian FEM for Newtonian Free-Surface Flows with Dynamic
+multiscale-simulation-of-rayleigh-taylor-instabili-f5802550|4|fluid-dynamics|0|Multiscale simulation of Rayleigh-Taylor instability using c
+overland-flow-solver-validation-with-novel-surface-4957c61a|4|computational-hydraulics|0|Overland Flow Solver Validation with Novel Surface Reconstru
+runge-kutta-discontinuous-galerkin-simulation-of-l-6c8ed039|4|ocean-engineering|0|Runge-Kutta Discontinuous Galerkin Simulation of Liquid Slos
+shallow-water-multi-component-transport-error-norm-a40482b0|3|computational-hydraulics|0|Shallow‑Water Multi‑Component Transport Error Norm Reproduct

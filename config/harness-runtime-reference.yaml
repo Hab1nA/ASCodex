@@ -1,0 +1,29 @@
+# 脱敏参考；不是 Codex 或 DSH 的可直接加载配置。
+runtime:
+  dsh_version: 0.1.1-rc.2
+  node: v24.14.0
+  web_bind: 127.0.0.1
+  web_port: 3080
+  max_parallel_tool_calls: 50
+  busy_enter: steer
+providers:
+  - name: deepseek
+    api: openai-compatible
+    base_url: https://api.deepseek.com
+    context_window: 1000000
+    credentials: process-environment-only
+  - name: ailink
+    api: openai-responses
+    base_url: https://linkai.pics
+    credentials: process-environment-only
+  - name: tokennexus
+    api: openai-responses
+    base_url: https://api1.aisz.mom/v1
+    credentials: process-environment-only
+solver_guard:
+  model_gate: ailink/gpt-5.6-luna
+  reasoning_effort: max
+  cadence_seconds: 600
+  same_content_seconds: 3600
+  burst_window_seconds: 300
+  burst_max_submits: 2

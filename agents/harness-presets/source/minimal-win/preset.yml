@@ -1,0 +1,3 @@
+name: 极简模式 (Windows)
+description: 仅提供持久 bash（Git Bash）与 str_replace_editor 的双工具编码 Agent；Windows 专用（含 win32 终端检查与非受限令牌）。
+order: 3

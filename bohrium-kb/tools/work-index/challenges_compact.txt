@@ -1,0 +1,60 @@
+construct-a-4-4-ppt-quantum-channel-and-verify-the-1c5c7f97|4|quantum-information|232|Construct a 4×4 PPT Quantum Channel and Verify the PPT Squar
+reasoning-gate-gbsde-feynman-kac-e8970329|4|mathematics|455|reasoning-gate/gbsde-feynman-kac
+reasoning-gate-separable-covariance-1fe5635b|4|combinatorics|412|reasoning-gate/separable-covariance
+thermodynamic-twisting-operator-diagnosis-of-perio-20fdd3fd|4|computational-physics|165|Thermodynamic twisting-operator diagnosis of periodic spin c
+flowforge-open-model-selection-flow-v5-a9464888|4|process-engineering|322|flowforge/open-model-selection-flow-v5
+mp-r-mp-r-a-uv-portal-a5be12b2|4|high-energy-physics|391|mp-r/mp-r-a-uv-portal
+mp-r-mp-r-ab-uv-split-coann-6924985d|4|high-energy-physics|570|mp-r/mp-r-ab-uv-split-coann
+focused-imaging-and-resolution-characterisation-fr-e287fbca|4|medical-imaging|358|Focused imaging and resolution characterisation from unfocus
+multi-sample-cnv-detection-from-binned-read-counts-15924b97|4|bioinformatics|463|Multi-sample CNV detection from binned read counts
+solving-heterogeneous-agent-models-with-deepham-18a5adeb|4|economics|328|Solving Heterogeneous Agent Models with DeepHAM
+thermodynamic-twisting-operator-for-periodic-spin-a672f516|4|physics|1|Thermodynamic twisting operator for periodic spin chains
+compute-an-exact-asymptotic-covariance-for-pattern-fa7d25ea|4|general|16|Compute an exact asymptotic covariance for pattern densities
+derive-leading-asymptotics-for-the-mean-and-varian-65e25750|1|general|6|Derive leading asymptotics for the mean and variance of desc
+derive-the-fully-nonlinear-pde-volatility-selector-0240569f|4|general|2|Derive the fully nonlinear PDE, volatility selector, and clo
+3d-refractive-index-reconstruction-with-non-paraxi-d8d9babd|1|computational-optics|370|3D refractive index reconstruction with non-paraxial multi-s
+spin-3-2-entanglement-power-and-zero-entanglement-f37e43b7|1|quantum-mechanics|173|Spin-3/2 entanglement power and zero-entanglement conditions
+stationary-huggett-equilibrium-with-a-finite-diffe-dda9aff2|1|economics|252|Stationary Huggett Equilibrium with a Finite-Difference Meth
+2fe-2s-sparse-ci-variational-energy-minimization-2bf4e3d5|3|scientific-computing|308|2Fe-2S Sparse CI Variational Energy Minimization
+muon-edge-reconstruction-sharp-material-boundaries-9839145f|3|physics|511|Muon Edge Reconstruction: Sharp Material Boundaries from Cos
+signed-multi-orientation-tdgl-grain-growth-cbc790a3|1|crystal-growth-modeling|142|Signed Multi-orientation TDGL Grain Growth
+convergence-and-efficiency-of-two-phase-and-shock-3b75bda5|1|computational-thermodynamics|213|Convergence and Efficiency of Two-Phase and Shock-Melting Me
+dft-crystal-structure-formation-energy-and-charge-730d57d3|1|density-functional-theory|116|DFT crystal structure, formation energy and charge transfer 
+site-projected-magnetic-moments-and-spin-state-ass-9640ab85|1|condensed-matter-magnetism|99|Site-projected magnetic moments and spin-state assignment in
+md-simulation-of-repulsive-dislocation-intersectio-32d14849-2|4|materials|208|MD Simulation of Repulsive Dislocation Intersection in Coppe
+three-dimensional-refractive-index-reconstruction-283009b5|3|physics|0|Three-dimensional refractive index reconstruction from multi
+pressure-drop-optimization-of-exhaust-manifold-75f05bfa-2|2|mechanical-engineering|27|Pressure Drop Optimization of Exhaust Manifold
+spatial-domain-identification-via-graph-informed-c-35985da3-2|4|biology|173|Spatial domain identification via graph-informed contrastive
+monte-carlo-simulation-of-liquid-chloroform-using-e0469f30|4|materials|212|Monte Carlo simulation of liquid chloroform using a single-c
+multi-band-electron-phonon-coupling-and-transition-2c57551c|3|physics|193|Multi-band electron-phonon coupling and transition temperatu
+ground-state-shell-occupations-and-fbd-universal-3-2e27dc1a|3|materials|176|Ground-state shell occupations and FBD universal-3 binding e
+find-an-exactly-verifiable-counterexample-to-edge-7141d3ed|4|math|35|Find an exactly verifiable counterexample to edge negative c
+find-an-exact-binary-answer-monogamy-of-entangleme-55ab0d77|4|math|33|Find an exact binary-answer monogamy-of-entanglement game wi
+find-a-rigorously-certified-finite-counterexample-45966214|4|math|32|Find a rigorously certified finite counterexample to invaria
+faithful-determinant-free-nn-vmc-reproduction-of-t-8d0d6b46|4|physics|126|Faithful determinant-free NN-VMC reproduction of the 4x4 Hub
+estimate-a-finite-horizon-competing-poisoning-bala-c38a0ad7|1|materials|215|Estimate a finite-horizon competing-poisoning balance from l
+closed-book-four-fermion-three-body-decay-helicity-77fef58e|4|physics|123|Closed-book: four-fermion three-body decay helicity amplitud
+battery-pack-cooling-optimization-via-cfd-simulati-07b75dec|4|thermal-engineering|8|Battery Pack Cooling Optimization via CFD Simulations
+battery-thermal-management-design-optimization-via-cb6122fd|4|battery-thermal-management|8|Battery Thermal Management Design Optimization via CFD
+cfd-model-validation-of-perforated-tube-water-flow-e04753ce|3|fluid-dynamics|10|CFD Model Validation of Perforated Tube Water Flow
+non-smooth-surface-drag-reduction-in-centrifugal-p-4de946e5|3|fluid-dynamics|1|Non-Smooth Surface Drag Reduction in Centrifugal Pump Impell
+parallel-liquid-cooling-battery-thermal-management-2ab0150a|3|fluid-dynamics|13|Parallel Liquid Cooling Battery Thermal Management: CFD Anal
+periodic-unsteady-convergence-assessment-using-fuz-0d8a8b30|3|turbomachinery|5|Periodic-Unsteady Convergence Assessment using Fuzzy Signal 
+unsteady-cascade-transfer-functions-computation-d03b5b6c|2|turbomachinery|15|Unsteady Cascade Transfer Functions Computation
+cfd-simulation-of-water-cooled-heat-exchanger-temp-958d2007|4|heat-transfer|3|CFD Simulation of Water-Cooled Heat Exchanger Temperature Un
+finite-element-simulation-of-shell-and-tube-heat-e-bb5957ff|3|heat-transfer|2|Finite Element Simulation of Shell-and-Tube Heat Exchanger (
+flow-distribution-prediction-via-bajura-jones-mode-29fce072|2|process-engineering|71|Flow Distribution Prediction via Bajura-Jones Model
+multipass-crossflow-correction-factor-computation-1dee1f59|2|heat-transfer|48|Multipass Crossflow Correction Factor Computation
+multiphase-cfd-simulation-of-chemical-looping-comb-e6090b73|4|materials|0|Multiphase CFD Simulation of Chemical Looping Combustion Fue
+numerical-simulation-of-bubble-dynamics-and-reacti-59d0f2c3|4|materials|0|Numerical simulation of bubble dynamics and reaction couplin
+post-combustion-analysis-in-aod-off-gas-flue-via-c-548b2e61|4|process-metallurgy|1|Post‑Combustion Analysis in AOD Off‑gas Flue via CFD
+prediction-of-rotordynamic-stiffness-coefficients-865786f0|3|turbomachinery|0|Prediction of Rotordynamic Stiffness Coefficients for a Shro
+baffle-orientation-and-fluid-viscosity-effects-on-12059e5c|4|thermal-engineering|1|Baffle Orientation and Fluid Viscosity Effects on Shell‑and‑
+biomass-gasifier-equilibrium-model-sensitivity-ana-57c2b1e4|3|materials|2|Biomass gasifier equilibrium model sensitivity analysis
+ccb-reaction-model-for-blast-furnace-isothermal-sc-43643913|3|metallurgical-engineering|1|CCB Reaction Model for Blast Furnace Isothermal Scenarios
+reproduce-entrained-flow-coal-gasification-cfd-mod-f195b335|4|fluid-dynamics|0|Reproduce Entrained-Flow Coal Gasification CFD Model and Val
+simplified-kinetics-based-ig-clc-fuel-reactor-perf-0c759b03|3|materials|1|Simplified Kinetics-Based iG-CLC Fuel Reactor Performance Ev
+simulation-of-industrial-scale-sorption-enhanced-g-28a15526|3|materials|0|Simulation of industrial-scale sorption enhanced gasificatio
+steady-state-simulation-and-optimization-of-sorpti-1c41900d|4|materials|0|Steady-state simulation and optimization of sorption-enhance
+thermodynamic-simulation-of-msw-gasification-based-3c64b1dd|3|thermodynamic-engineering|1|Thermodynamic Simulation of MSW Gasification-based Power and
+cfd-simulation-of-oxy-coal-combustion-with-improve-4c6828f1|4|combustion|0|CFD simulation of oxy-coal combustion with improved sub-mode

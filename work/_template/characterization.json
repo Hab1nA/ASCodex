@@ -1,0 +1,28 @@
+{
+  "characterization_version": "1.0",
+  "challenge_id": "CHANGE_ME",
+  "targets": [
+    {
+      "name": "CHANGE_ME_target",
+      "kind": "scalar",
+      "description": "CHANGE_ME",
+      "expected_outputs": ["outputs/answer.txt"],
+      "unit": "CHANGE_ME"
+    }
+  ],
+  "deviations_from_paper": [
+    {
+      "target": "CHANGE_ME_target",
+      "metric": "relative_error",
+      "actual_value": 0.0,
+      "reference_value": 0.0,
+      "score": 1.0,
+      "tolerance": 0.001,
+      "evidence_artifact": "answer_txt",
+      "explanation": "CHANGE_ME: set actual_value from your computation and reference_value from the best prior attempt / paper value."
+    }
+  ],
+  "sensitivity": [],
+  "envelope": [],
+  "failure_modes": []
+}

@@ -1,0 +1,25 @@
+# 从 ~/.dsh/solver-guard/rules.yaml 提取的策略摘要；不含身份、token 或运行态。
+submission:
+  channel: harbor_only
+  required_gates: [channel, identity, cadence, redline, trace, model]
+  dry_run_first: true
+  verify_challenge_id_after_submit: true
+trace:
+  minimum_score: 70
+  must_be_real_execution: true
+  require_typed_steps: true
+  require_pairing: true
+  require_timestamps: true
+  require_artifact_provenance: true
+  stdout_in_tool_result_body: true
+redline:
+  scan_all_text_artifacts: true
+  reject_prior_attempt_score_team_references: true
+compute:
+  local_smoke_seconds: 120
+  heavy_must_cloud: true
+  default_timeout_seconds: 3600
+  default_budget_usd: 50
+monitoring:
+  score_watcher: not_available_in_codex
+  autopush: not_available_in_codex
