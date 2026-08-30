@@ -31,3 +31,4 @@ codex/codex-rs/target*/
 **/attachments/
 **/storages/
 **/undo-snapshots/
+.mimosa/

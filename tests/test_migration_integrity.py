@@ -34,7 +34,14 @@ def test_no_runtime_credentials_or_private_keys_are_migrated() -> None:
         re.I,
     )
     for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or "__pycache__" in path.parts:
+        # ".mimosa" is local plugin hook state (it snapshots repo files under hashed names);
+        # it is runtime residue, not migrated content, and must never gate this scan.
+        if (
+            not path.is_file()
+            or ".git" in path.parts
+            or "__pycache__" in path.parts
+            or ".mimosa" in path.parts
+        ):
             continue
         relative = path.relative_to(ROOT)
         if "codex" in relative.parts and any(

@@ -281,7 +281,7 @@ pub struct IdentityPolicy {
     pub owner: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IdentityPoolEntry {
     pub name: String,
@@ -290,6 +290,50 @@ pub struct IdentityPoolEntry {
     pub identity_class: String,
     #[serde(default)]
     pub frozen: bool,
+    #[serde(default)]
+    pub max_reserved_cost_usd: Option<f64>,
+    #[serde(default)]
+    pub max_concurrent_reservations: Option<u32>,
+    #[serde(default)]
+    pub min_interval_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IdentityQuota {
+    pub max_reserved_cost_usd: Option<f64>,
+    pub max_concurrent_reservations: Option<u32>,
+    pub min_interval_seconds: Option<i64>,
+}
+
+impl IdentityQuota {
+    fn validate(&self) -> Result<(), &'static str> {
+        if let Some(max_cost) = self.max_reserved_cost_usd {
+            if !max_cost.is_finite() || max_cost < 0.0 {
+                return Err("identity pool max_reserved_cost_usd is invalid");
+            }
+        }
+        if let Some(max_concurrent) = self.max_concurrent_reservations {
+            if max_concurrent == 0 {
+                return Err("identity pool max_concurrent_reservations must be positive");
+            }
+        }
+        if let Some(interval) = self.min_interval_seconds {
+            if interval < 0 {
+                return Err("identity pool min_interval_seconds is invalid");
+            }
+        }
+        Ok(())
+    }
+}
+
+impl IdentityPoolEntry {
+    pub fn quota(&self) -> IdentityQuota {
+        IdentityQuota {
+            max_reserved_cost_usd: self.max_reserved_cost_usd,
+            max_concurrent_reservations: self.max_concurrent_reservations,
+            min_interval_seconds: self.min_interval_seconds,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1290,6 +1334,9 @@ impl Policy {
             if matches[0].frozen {
                 return Admission::denied(Gate::Identity, "identity is frozen");
             }
+            if let Err(reason) = matches[0].quota().validate() {
+                return Admission::denied(Gate::Identity, reason);
+            }
         } else if request.identity != self.identity.name
             || request.challenge_id != self.identity.challenge_id
             || request.owner != self.identity.owner
@@ -1564,6 +1611,16 @@ impl Ledger {
             .await?;
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS reservations (id TEXT PRIMARY KEY, challenge_id TEXT NOT NULL, owner TEXT NOT NULL, estimated_cost REAL NOT NULL, state TEXT NOT NULL)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS reservation_dimensions (reservation_id TEXT PRIMARY KEY, identity TEXT NOT NULL, identity_class TEXT NOT NULL, created_at_ms INTEGER NOT NULL)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS reservation_dimensions_identity_idx ON reservation_dimensions (identity, identity_class)",
         )
         .execute(&pool)
         .await?;
@@ -3629,11 +3686,56 @@ impl Ledger {
         now_ms: i64,
         min_interval_seconds: i64,
     ) -> Result<(), LedgerError> {
+        self.reserve_with_identity_quota(
+            id,
+            challenge_id,
+            owner,
+            "",
+            "",
+            estimated_cost,
+            budget,
+            content_sha256,
+            now_ms,
+            min_interval_seconds,
+            None,
+        )
+        .await
+    }
+
+    /// Core reservation entry. When a quota is supplied, the reservation is classified with an
+    /// identity/identity_class dimension row and every per-identity quota limit is enforced in
+    /// the same transaction. Reservations written without a dimension row (legacy callers or
+    /// historical rows) block quota enforcement entirely instead of bypassing it.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn reserve_with_identity_quota(
+        &self,
+        id: &str,
+        challenge_id: &str,
+        owner: &str,
+        identity: &str,
+        identity_class: &str,
+        estimated_cost: f64,
+        budget: f64,
+        content_sha256: &str,
+        now_ms: i64,
+        min_interval_seconds: i64,
+        quota: Option<IdentityQuota>,
+    ) -> Result<(), LedgerError> {
         if estimated_cost.is_sign_negative() {
             return Err(LedgerError::Degraded("negative estimated cost".into()));
         }
         if min_interval_seconds.is_negative() {
             return Err(LedgerError::Degraded("negative cadence interval".into()));
+        }
+        if let Some(quota) = &quota {
+            quota
+                .validate()
+                .map_err(|reason| LedgerError::Degraded(reason.to_string()))?;
+            if identity.trim().is_empty() || identity_class.trim().is_empty() {
+                return Err(LedgerError::Degraded(
+                    "identity quota requires an identity and identity class".into(),
+                ));
+            }
         }
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
@@ -3666,6 +3768,70 @@ impl Ledger {
                 }
             }
         }
+        if let Some(quota) = &quota {
+            let unclassified = sqlx::query(
+                "SELECT COUNT(*) AS unclassified FROM reservations r WHERE r.state = 'reserved' AND NOT EXISTS (SELECT 1 FROM reservation_dimensions d WHERE d.reservation_id = r.id)",
+            )
+            .fetch_one(&mut *transaction)
+            .await?;
+            let unclassified: i64 = unclassified.try_get("unclassified")?;
+            if unclassified > 0 {
+                return Err(LedgerError::Degraded(
+                    "existing reservations lack identity dimensions; quota cannot be enforced fail-closed"
+                        .into(),
+                ));
+            }
+            if let Some(max_cost) = quota.max_reserved_cost_usd {
+                let row = sqlx::query(
+                    "SELECT COALESCE(SUM(r.estimated_cost), 0.0) AS reserved FROM reservations r JOIN reservation_dimensions d ON d.reservation_id = r.id WHERE d.identity = ? AND d.identity_class = ? AND r.state = 'reserved'",
+                )
+                .bind(identity)
+                .bind(identity_class)
+                .fetch_one(&mut *transaction)
+                .await?;
+                let identity_reserved: f64 = row.try_get("reserved")?;
+                if identity_reserved + estimated_cost > max_cost {
+                    return Err(LedgerError::Degraded(
+                        "reservation would exceed identity reserved cost quota".into(),
+                    ));
+                }
+            }
+            if let Some(max_concurrent) = quota.max_concurrent_reservations {
+                let row = sqlx::query(
+                    "SELECT COUNT(*) AS active FROM reservations r JOIN reservation_dimensions d ON d.reservation_id = r.id WHERE d.identity = ? AND d.identity_class = ? AND r.state = 'reserved'",
+                )
+                .bind(identity)
+                .bind(identity_class)
+                .fetch_one(&mut *transaction)
+                .await?;
+                let active: i64 = row.try_get("active")?;
+                if active >= i64::from(max_concurrent) {
+                    return Err(LedgerError::Degraded(
+                        "reservation would exceed identity concurrent reservation quota".into(),
+                    ));
+                }
+            }
+            if let Some(min_interval) = quota.min_interval_seconds {
+                if min_interval > 0 {
+                    let row = sqlx::query(
+                        "SELECT MAX(d.created_at_ms) AS latest FROM reservations r JOIN reservation_dimensions d ON d.reservation_id = r.id WHERE d.identity = ? AND d.identity_class = ? AND r.state IN ('reserved', 'committed')",
+                    )
+                    .bind(identity)
+                    .bind(identity_class)
+                    .fetch_one(&mut *transaction)
+                    .await?;
+                    let latest_ms: Option<i64> = row.try_get("latest")?;
+                    if let Some(latest_ms) = latest_ms {
+                        let elapsed = now_ms.saturating_sub(latest_ms);
+                        if elapsed < min_interval.saturating_mul(1000) {
+                            return Err(LedgerError::Degraded(
+                                "identity cadence interval is not satisfied".into(),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         sqlx::query(
             "INSERT INTO reservations (id, challenge_id, owner, estimated_cost, state) VALUES (?, ?, ?, ?, 'reserved')",
         )
@@ -3685,6 +3851,17 @@ impl Ledger {
         .bind(now_ms)
         .execute(&mut *transaction)
         .await?;
+        if !identity.is_empty() {
+            sqlx::query(
+                "INSERT INTO reservation_dimensions (reservation_id, identity, identity_class, created_at_ms) VALUES (?, ?, ?, ?)",
+            )
+            .bind(id)
+            .bind(identity)
+            .bind(identity_class)
+            .bind(now_ms)
+            .execute(&mut *transaction)
+            .await?;
+        }
         transaction.commit().await?;
         Ok(())
     }
@@ -4006,16 +4183,44 @@ impl SubmissionBroker {
         if !admission.allowed {
             return Err(BrokerError::Admission(admission));
         }
+        // Admission already proved a unique unfrozen pool binding when the pool is non-empty;
+        // its quota is mandatory there. An empty pool keeps the legacy single-identity path
+        // with no identity-level quota.
+        let quota = if self.policy.identity_pool.is_empty() {
+            None
+        } else {
+            Some(
+                self.policy
+                    .identity_pool
+                    .iter()
+                    .find(|entry| {
+                        entry.name == request.identity
+                            && entry.challenge_id == request.challenge_id
+                            && entry.owner == request.owner
+                            && entry.identity_class == request.identity_class
+                    })
+                    .map(|entry| entry.quota())
+                    .ok_or_else(|| {
+                        LedgerError::Degraded(
+                            "identity pool binding disappeared between admission and reservation"
+                                .into(),
+                        )
+                    })?,
+            )
+        };
         self.ledger
-            .reserve_with_cadence(
+            .reserve_with_identity_quota(
                 reservation_id,
                 request.challenge_id,
                 request.owner,
+                request.identity,
+                request.identity_class,
                 request.estimated_cost_usd,
                 budget,
                 request.content_sha256,
                 request.now_ms,
                 self.policy.cadence.min_interval_seconds,
+                quota,
             )
             .await
             .map_err(BrokerError::from)
@@ -6109,6 +6314,335 @@ model:
                 .is_ok()
         );
         ledger.release("c").await.expect("release");
+    }
+
+    fn pool_policy(dir: &tempfile::TempDir, identity_pool_yaml: &str) -> Policy {
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        let trusted_cli = workspace.join("bohr.exe");
+        std::fs::write(&trusted_cli, b"trusted").expect("cli");
+        let yaml = format!(
+            r#"
+channel:
+  harbor_only: true
+  workspace_root: {}
+  trusted_cli_sha256: {}
+identity:
+  name: legacy-id
+  challenge_id: challenge-a
+  owner: owner-a
+identity_pool:
+{}
+cadence:
+  min_interval_seconds: 0
+  max_estimated_cost_usd: 10.0
+redline:
+  clean: true
+trace:
+  real_execution: true
+  paired_tool_events: true
+  artifact_provenance: true
+model:
+  provider: provider
+  model: model
+"#,
+            workspace.display(),
+            sha256_file(&trusted_cli).expect("hash"),
+            identity_pool_yaml
+        );
+        Policy::from_yaml(&yaml).expect("policy parses")
+    }
+
+    fn pool_paths(root: &Path) -> (PathBuf, PathBuf) {
+        let workspace = root.join("workspace");
+        let cli = workspace.join("bohr.exe");
+        (cli, workspace)
+    }
+
+    fn pool_request<'a>(
+        cli: &'a Path,
+        workspace: &'a Path,
+        identity: &'a str,
+        identity_class: &'a str,
+        estimated_cost_usd: f64,
+        now_ms: i64,
+    ) -> AdmissionRequest<'a> {
+        AdmissionRequest {
+            channel: "harbor",
+            identity,
+            identity_class,
+            challenge_id: "challenge-a",
+            owner: "owner-a",
+            cli_path: cli,
+            workspace,
+            estimated_cost_usd,
+            trace: TraceEvidence {
+                real_execution: true,
+                paired_tool_events: true,
+                artifact_provenance: true,
+            },
+            provider: "provider",
+            model: "model",
+            content_sha256: "content",
+            now_ms,
+        }
+    }
+
+    #[tokio::test]
+    async fn identity_quota_enforces_reserved_cost_cap() {
+        let dir = tempdir().expect("tempdir");
+        let (cli, workspace) = pool_paths(dir.path());
+        let policy = pool_policy(
+            &dir,
+            "  - name: id-a\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n    max_reserved_cost_usd: 1.0\n",
+        );
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        let broker = SubmissionBroker::new(policy, ledger.clone());
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.6, 100_000),
+                "r1",
+                10.0,
+            )
+            .await
+            .expect("first reservation");
+        assert!(
+            broker
+                .prepare(
+                    &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.5, 100_000),
+                    "r2",
+                    10.0
+                )
+                .await
+                .is_err()
+        );
+        assert!(ledger.release("r2").await.is_err());
+        ledger.release("r1").await.expect("release");
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.5, 100_000),
+                "r3",
+                10.0,
+            )
+            .await
+            .expect("released cost frees identity quota");
+    }
+
+    #[tokio::test]
+    async fn identity_quota_enforces_concurrent_reservation_cap() {
+        let dir = tempdir().expect("tempdir");
+        let (cli, workspace) = pool_paths(dir.path());
+        let policy = pool_policy(
+            &dir,
+            "  - name: id-a\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n    max_concurrent_reservations: 1\n",
+        );
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        let broker = SubmissionBroker::new(policy, ledger.clone());
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000),
+                "r1",
+                10.0,
+            )
+            .await
+            .expect("first reservation");
+        assert!(
+            broker
+                .prepare(
+                    &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000),
+                    "r2",
+                    10.0
+                )
+                .await
+                .is_err()
+        );
+        ledger.release("r1").await.expect("release");
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000),
+                "r2",
+                10.0,
+            )
+            .await
+            .expect("released slot frees identity quota");
+    }
+
+    #[tokio::test]
+    async fn identity_cadence_is_independent_per_identity_and_class() {
+        let dir = tempdir().expect("tempdir");
+        let (cli, workspace) = pool_paths(dir.path());
+        let policy = pool_policy(
+            &dir,
+            "  - name: id-a\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n    min_interval_seconds: 60\n  - name: id-b\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n    min_interval_seconds: 60\n  - name: id-a\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-secondary\n    min_interval_seconds: 60\n",
+        );
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        let broker = SubmissionBroker::new(policy, ledger.clone());
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000),
+                "r-a1",
+                10.0,
+            )
+            .await
+            .expect("id-a primary");
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-b", "solver-primary", 0.1, 110_000),
+                "r-b1",
+                10.0,
+            )
+            .await
+            .expect("id-b cadence is independent");
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-secondary", 0.1, 110_000),
+                "r-a2",
+                10.0,
+            )
+            .await
+            .expect("id-a secondary class cadence is independent");
+        assert!(
+            broker
+                .prepare(
+                    &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 130_000),
+                    "r-a3",
+                    10.0
+                )
+                .await
+                .is_err()
+        );
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 161_000),
+                "r-a4",
+                10.0,
+            )
+            .await
+            .expect("id-a primary cadence elapsed");
+    }
+
+    #[tokio::test]
+    async fn frozen_identity_blocks_prepare_without_reserving() {
+        let dir = tempdir().expect("tempdir");
+        let (cli, workspace) = pool_paths(dir.path());
+        let policy = pool_policy(
+            &dir,
+            "  - name: id-a\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n  - name: id-b\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n    frozen: true\n",
+        );
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        let broker = SubmissionBroker::new(policy, ledger.clone());
+        assert!(matches!(
+            broker
+                .prepare(
+                    &pool_request(&cli, &workspace, "id-b", "solver-primary", 0.1, 100_000),
+                    "r-b",
+                    10.0
+                )
+                .await,
+            Err(BrokerError::Admission(_))
+        ));
+        assert!(ledger.release("r-b").await.is_err());
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000),
+                "r-a",
+                10.0,
+            )
+            .await
+            .expect("unfrozen identity still reserves");
+    }
+
+    #[tokio::test]
+    async fn legacy_reservations_without_dimensions_block_quota_fail_closed() {
+        let dir = tempdir().expect("tempdir");
+        let (cli, workspace) = pool_paths(dir.path());
+        let policy = pool_policy(
+            &dir,
+            "  - name: id-a\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n    max_reserved_cost_usd: 1.0\n",
+        );
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        ledger
+            .reserve("legacy", "challenge-a", "owner-a", 0.1, 10.0)
+            .await
+            .expect("legacy reservation");
+        let broker = SubmissionBroker::new(policy, ledger.clone());
+        assert!(matches!(
+            broker
+                .prepare(&pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000), "r1", 10.0)
+                .await,
+            Err(BrokerError::Ledger(LedgerError::Degraded(message)))
+                if message.contains("identity dimensions")
+        ));
+        ledger.release("legacy").await.expect("release legacy");
+        broker
+            .prepare(
+                &pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000),
+                "r1",
+                10.0,
+            )
+            .await
+            .expect("classified reservations enforce quota again");
+    }
+
+    #[tokio::test]
+    async fn failed_reservation_transaction_leaves_no_rows() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        sqlx::query(
+            "INSERT INTO reservation_dimensions (reservation_id, identity, identity_class, created_at_ms) VALUES ('tx-x', 'id-a', 'solver-primary', 1)",
+        )
+        .execute(&ledger.pool)
+        .await
+        .expect("orphan dimension row");
+        let error = ledger
+            .reserve_with_identity_quota(
+                "tx-x",
+                "challenge-a",
+                "owner-a",
+                "id-a",
+                "solver-primary",
+                0.1,
+                10.0,
+                "hash",
+                100_000,
+                0,
+                Some(IdentityQuota {
+                    max_reserved_cost_usd: Some(1.0),
+                    max_concurrent_reservations: None,
+                    min_interval_seconds: None,
+                }),
+            )
+            .await;
+        assert!(error.is_err());
+        let row = sqlx::query("SELECT COUNT(*) AS n FROM reservations WHERE id = 'tx-x'")
+            .fetch_one(&ledger.pool)
+            .await
+            .expect("count reservations");
+        assert_eq!(row.try_get::<i64, _>("n").expect("n"), 0);
+        let row = sqlx::query("SELECT COUNT(*) AS n FROM attempts WHERE id = 'tx-x'")
+            .fetch_one(&ledger.pool)
+            .await
+            .expect("count attempts");
+        assert_eq!(row.try_get::<i64, _>("n").expect("n"), 0);
+        ledger
+            .reserve_with_identity_quota(
+                "tx-y",
+                "challenge-a",
+                "owner-a",
+                "id-a",
+                "solver-primary",
+                0.1,
+                10.0,
+                "hash",
+                100_000,
+                0,
+                Some(IdentityQuota {
+                    max_reserved_cost_usd: Some(1.0),
+                    max_concurrent_reservations: None,
+                    min_interval_seconds: None,
+                }),
+            )
+            .await
+            .expect("ledger still usable after rollback");
     }
 
     #[tokio::test]
