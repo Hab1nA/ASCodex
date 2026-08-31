@@ -82,3 +82,34 @@ def test_normalize_object_rejects_unknown_value_types() -> None:
         FieldSpec("x", [], "bogus", False)
     with pytest.raises(ValueError):
         SchemaRegistry(fields=[FieldSpec("x", [], "bogus", False)])
+
+
+def test_attempt_registry_has_declared_aliases() -> None:
+    from scripts.ascodex_schema import attempt_registry
+
+    registry = attempt_registry()
+    names = {spec.name for spec in registry.fields}
+    assert {"attempt_id", "challenge_id", "owner", "effective_score", "raw_score"} <= names
+    raw = {
+        "attemptId": "a-1",
+        "challengeId": "c-1",
+        "creditedOwner": "owner-1",
+        "effectiveScore": 88.0,
+        "rawScore": 89.0,
+    }
+    normalized = normalize_object(raw, registry)
+    assert normalized["attempt_id"] == "a-1"
+    assert normalized["challenge_id"] == "c-1"
+    assert normalized["owner"] == "owner-1"
+    assert normalized["effective_score"] == 88.0
+    assert normalized["raw_score"] == 89.0
+
+
+def test_challenge_registry_requires_challenge_id() -> None:
+    from scripts.ascodex_schema import challenge_registry
+
+    registry = challenge_registry()
+    normalized = normalize_object({"challenge_id": "c-1", "title": "t"}, registry)
+    assert normalized["challenge_id"] == "c-1"
+    with pytest.raises(ValueError):
+        normalize_object({"title": "t"}, registry)  # challenge_id required

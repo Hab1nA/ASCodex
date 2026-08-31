@@ -91,3 +91,29 @@ def normalize_object(raw: dict[str, Any], registry: SchemaRegistry) -> dict[str,
     for spec in registry.fields:
         normalized[spec.name] = spec.resolve(raw)
     return normalized
+
+
+def attempt_registry() -> SchemaRegistry:
+    """Declared field registry for one challenge-attempt object."""
+    return SchemaRegistry(
+        fields=[
+            FieldSpec("attempt_id", ["attemptId", "attempt", "id"], "string", True),
+            FieldSpec("challenge_id", ["challengeId", "challenge"], "string", True),
+            FieldSpec("owner", ["credited_owner", "creditedOwner", "owner", "user", "agent"], "string", True),
+            FieldSpec("raw_score", ["rawScore", "original_score", "originalScore"], "number", False),
+            FieldSpec("effective_score", ["effectiveScore", "credited_score", "creditedScore", "score"], "number", False),
+            FieldSpec("route", ["route", "url", "path"], "string", False),
+            FieldSpec("bundle_revision", ["bundleRevision", "bundle_hash", "bundleHash"], "string", False),
+        ]
+    )
+
+
+def challenge_registry() -> SchemaRegistry:
+    """Declared field registry for one challenge object."""
+    return SchemaRegistry(
+        fields=[
+            FieldSpec("challenge_id", ["challengeId", "challenge", "id"], "string", True),
+            FieldSpec("title", ["title", "name"], "string", False),
+            FieldSpec("status", ["status", "state"], "string", False),
+        ]
+    )

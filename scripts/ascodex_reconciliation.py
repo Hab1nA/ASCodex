@@ -401,21 +401,18 @@ def _attempt_page(response: Any) -> list[Any]:
     return [response]
 
 
-def _snake_to_camel(value: str) -> str:
-    head, *tail = value.split("_")
-    return head + "".join(part.title() for part in tail)
-
-
 def _attempt_field(attempt: Any, field: str, default: str | None = None) -> str:
     if not isinstance(attempt, dict):
         raise ValueError("attempt page entries must be JSON objects")
-    value = _first(
-        attempt,
-        field,
-        field.replace("_", ""),
-        _snake_to_camel(field),
-        field.replace("_", "-"),
-    )
+    from scripts.ascodex_schema import attempt_registry, normalize_object
+
+    try:
+        normalized = normalize_object(attempt, attempt_registry())
+    except ValueError as error:
+        raise ValueError(str(error)) from error
+    if field not in normalized:
+        raise ValueError(f"attempt entry is missing {field}")
+    value = normalized[field]
     if value in (None, ""):
         value = default
     if value in (None, ""):
