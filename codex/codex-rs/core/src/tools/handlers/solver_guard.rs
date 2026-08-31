@@ -374,16 +374,6 @@ impl SolverGuardSubmitHandler {
             content_sha256: &args.content_sha256,
             now_ms,
         };
-        let admission = policy.admit(&request);
-        if !admission.allowed {
-            return json!({
-                "allowed": false,
-                "status": "blocked",
-                "dry_run": true,
-                "failures": admission.failures,
-            });
-        }
-
         let ledger_path = match std::env::var("ASCODEX_SOLVER_LEDGER_FILE") {
             Ok(path) if !path.trim().is_empty() => path,
             _ => {
@@ -415,6 +405,39 @@ impl SolverGuardSubmitHandler {
                 });
             }
         };
+        // The ledger is the runtime-authoritative identity pool once any active entry exists:
+        // an identity without a ledger binding fails closed instead of using the YAML pool.
+        let mut policy = policy;
+        match ledger
+            .resolve_identity_pool(
+                &args.identity,
+                &args.challenge_id,
+                &args.owner,
+                &args.identity_class,
+            )
+            .await
+        {
+            Ok(Some(entry)) => policy.identity_pool = vec![entry],
+            Ok(None) => {}
+            Err(err) => {
+                return json!({
+                    "allowed": false,
+                    "status": "blocked",
+                    "dry_run": true,
+                    "reason": format!("identity pool ledger gate blocked: {err}"),
+                });
+            }
+        }
+        let admission = policy.admit(&request);
+        if !admission.allowed {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "failures": admission.failures,
+            });
+        }
+
         if let Err(err) = ledger
             .resolve_actor_context(
                 &args.lease_id,

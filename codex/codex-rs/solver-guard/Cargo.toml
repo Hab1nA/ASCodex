@@ -20,6 +20,10 @@ path = "src/bin/stage_admin.rs"
 name = "ascodex-observation-admin"
 path = "src/bin/observation_admin.rs"
 
+[[bin]]
+name = "ascodex-pool-admin"
+path = "src/bin/pool_admin.rs"
+
 
 [lints]
 workspace = true

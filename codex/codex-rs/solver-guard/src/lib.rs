@@ -1625,6 +1625,11 @@ impl Ledger {
         .execute(&pool)
         .await?;
         sqlx::query(
+            "CREATE TABLE IF NOT EXISTS identity_pool_entries (name TEXT NOT NULL, challenge_id TEXT NOT NULL, owner TEXT NOT NULL, identity_class TEXT NOT NULL, frozen INTEGER NOT NULL, max_reserved_cost_usd REAL, max_concurrent_reservations INTEGER, min_interval_seconds INTEGER, provisioned_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL, removed_at_ms INTEGER, PRIMARY KEY (name, challenge_id, owner, identity_class))",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
             "CREATE TABLE IF NOT EXISTS attempts (id TEXT PRIMARY KEY, challenge_id TEXT NOT NULL, owner TEXT NOT NULL, content_sha256 TEXT NOT NULL, started_at_ms INTEGER NOT NULL, state TEXT NOT NULL, result_json TEXT)",
         )
         .execute(&pool)
@@ -3866,6 +3871,278 @@ impl Ledger {
         Ok(())
     }
 
+    /// Resolve the authoritative identity pool entry for a submission request.
+    ///
+    /// The ledger pool is runtime-authoritative once any active entry exists: a request whose
+    /// identity is not bound fails closed instead of falling back to the YAML pool. When no
+    /// active entry exists the YAML pool (or the legacy single identity) still applies.
+    pub async fn resolve_identity_pool(
+        &self,
+        name: &str,
+        challenge_id: &str,
+        owner: &str,
+        identity_class: &str,
+    ) -> Result<Option<IdentityPoolEntry>, LedgerError> {
+        let row = sqlx::query(
+            "SELECT EXISTS(SELECT 1 FROM identity_pool_entries WHERE removed_at_ms IS NULL) AS active",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let active: i64 = row.try_get("active")?;
+        if active == 0 {
+            return Ok(None);
+        }
+        let entry = self
+            .get_identity_pool_entry(name, challenge_id, owner, identity_class)
+            .await?
+            .ok_or_else(|| {
+                LedgerError::Degraded("identity has no active ledger pool binding".into())
+            })?;
+        Ok(Some(entry))
+    }
+
+    pub async fn get_identity_pool_entry(
+        &self,
+        name: &str,
+        challenge_id: &str,
+        owner: &str,
+        identity_class: &str,
+    ) -> Result<Option<IdentityPoolEntry>, LedgerError> {
+        let row = sqlx::query(
+            "SELECT name, challenge_id, owner, identity_class, frozen, max_reserved_cost_usd, max_concurrent_reservations, min_interval_seconds FROM identity_pool_entries WHERE name = ? AND challenge_id = ? AND owner = ? AND identity_class = ? AND removed_at_ms IS NULL",
+        )
+        .bind(name)
+        .bind(challenge_id)
+        .bind(owner)
+        .bind(identity_class)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(|row| identity_pool_entry_from_row(&row))
+            .transpose()
+    }
+
+    pub async fn list_active_identity_pool_entries(
+        &self,
+    ) -> Result<Vec<IdentityPoolEntry>, LedgerError> {
+        let rows = sqlx::query(
+            "SELECT name, challenge_id, owner, identity_class, frozen, max_reserved_cost_usd, max_concurrent_reservations, min_interval_seconds FROM identity_pool_entries WHERE removed_at_ms IS NULL ORDER BY name, identity_class",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter()
+            .map(identity_pool_entry_from_row)
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    /// Administrative variant that commits the pool entry and its audit event atomically.
+    /// Provision is desired-state: re-provisioning an existing entry reactivates it (clears
+    /// removal) and replaces its frozen/quota state.
+    pub async fn provision_identity_pool_entry_audited(
+        &self,
+        entry: &IdentityPoolEntry,
+        now_ms: i64,
+        event: &CoordinationEventRecord<'_>,
+    ) -> Result<u64, LedgerError> {
+        validate_identity_pool_entry(entry)?;
+        let key = identity_pool_entry_key(
+            &entry.name,
+            &entry.challenge_id,
+            &entry.owner,
+            &entry.identity_class,
+        );
+        if event.aggregate_type != "identity_pool"
+            || event.aggregate_id != key
+            || event.event_type != "identity_pool_provisioned"
+            || event.occurred_at_ms != now_ms
+        {
+            return Err(LedgerError::Degraded(
+                "identity pool event is not bound to the entry".into(),
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        let appended = append_event_in_transaction(&mut transaction, event).await?;
+        if appended.replayed {
+            let row = sqlx::query(
+                "SELECT frozen, max_reserved_cost_usd, max_concurrent_reservations, min_interval_seconds, removed_at_ms FROM identity_pool_entries WHERE name = ? AND challenge_id = ? AND owner = ? AND identity_class = ?",
+            )
+            .bind(&entry.name)
+            .bind(&entry.challenge_id)
+            .bind(&entry.owner)
+            .bind(&entry.identity_class)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or_else(|| {
+                LedgerError::Degraded("replayed identity pool provision is missing its entry".into())
+            })?;
+            if row.try_get::<bool, _>("frozen")? != entry.frozen
+                || row.try_get::<Option<f64>, _>("max_reserved_cost_usd")?
+                    != entry.max_reserved_cost_usd
+                || row.try_get::<Option<i64>, _>("max_concurrent_reservations")?
+                    != entry.max_concurrent_reservations.map(i64::from)
+                || row.try_get::<Option<i64>, _>("min_interval_seconds")?
+                    != entry.min_interval_seconds
+                || row.try_get::<Option<i64>, _>("removed_at_ms")?.is_some()
+            {
+                return Err(LedgerError::Degraded(
+                    "replayed identity pool provision does not match the stored entry".into(),
+                ));
+            }
+            transaction.commit().await?;
+            return Ok(appended.version);
+        }
+        sqlx::query(
+            "INSERT INTO identity_pool_entries (name, challenge_id, owner, identity_class, frozen, max_reserved_cost_usd, max_concurrent_reservations, min_interval_seconds, provisioned_at_ms, updated_at_ms, removed_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL) ON CONFLICT(name, challenge_id, owner, identity_class) DO UPDATE SET frozen = excluded.frozen, max_reserved_cost_usd = excluded.max_reserved_cost_usd, max_concurrent_reservations = excluded.max_concurrent_reservations, min_interval_seconds = excluded.min_interval_seconds, updated_at_ms = excluded.updated_at_ms, removed_at_ms = NULL",
+        )
+        .bind(&entry.name)
+        .bind(&entry.challenge_id)
+        .bind(&entry.owner)
+        .bind(&entry.identity_class)
+        .bind(entry.frozen)
+        .bind(entry.max_reserved_cost_usd)
+        .bind(entry.max_concurrent_reservations.map(i64::from))
+        .bind(entry.min_interval_seconds)
+        .bind(now_ms)
+        .bind(now_ms)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(appended.version)
+    }
+
+    /// Administrative variant that freezes or thaws an active entry atomically with its audit
+    /// event. A missing or already-removed entry fails closed.
+    pub async fn set_identity_pool_frozen_audited(
+        &self,
+        name: &str,
+        challenge_id: &str,
+        owner: &str,
+        identity_class: &str,
+        frozen: bool,
+        now_ms: i64,
+        event: &CoordinationEventRecord<'_>,
+    ) -> Result<u64, LedgerError> {
+        let key = identity_pool_entry_key(name, challenge_id, owner, identity_class);
+        let expected_event_type = if frozen {
+            "identity_pool_frozen"
+        } else {
+            "identity_pool_thawed"
+        };
+        if event.aggregate_type != "identity_pool"
+            || event.aggregate_id != key
+            || event.event_type != expected_event_type
+            || event.occurred_at_ms != now_ms
+        {
+            return Err(LedgerError::Degraded(
+                "identity pool event is not bound to the entry state".into(),
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        let appended = append_event_in_transaction(&mut transaction, event).await?;
+        if appended.replayed {
+            let row = sqlx::query(
+                "SELECT frozen FROM identity_pool_entries WHERE name = ? AND challenge_id = ? AND owner = ? AND identity_class = ?",
+            )
+            .bind(name)
+            .bind(challenge_id)
+            .bind(owner)
+            .bind(identity_class)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or_else(|| {
+                LedgerError::Degraded("replayed identity pool freeze is missing its entry".into())
+            })?;
+            if row.try_get::<bool, _>("frozen")? != frozen {
+                return Err(LedgerError::Degraded(
+                    "replayed identity pool freeze does not match the stored entry".into(),
+                ));
+            }
+            transaction.commit().await?;
+            return Ok(appended.version);
+        }
+        let result = sqlx::query(
+            "UPDATE identity_pool_entries SET frozen = ?, updated_at_ms = ? WHERE name = ? AND challenge_id = ? AND owner = ? AND identity_class = ? AND removed_at_ms IS NULL",
+        )
+        .bind(frozen)
+        .bind(now_ms)
+        .bind(name)
+        .bind(challenge_id)
+        .bind(owner)
+        .bind(identity_class)
+        .execute(&mut *transaction)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(LedgerError::Degraded(
+                "identity pool entry is missing or already removed".into(),
+            ));
+        }
+        transaction.commit().await?;
+        Ok(appended.version)
+    }
+
+    /// Administrative variant that removes an active entry atomically with its audit event.
+    /// Removal is terminal for the natural key; a later provision reactivates it.
+    pub async fn remove_identity_pool_entry_audited(
+        &self,
+        name: &str,
+        challenge_id: &str,
+        owner: &str,
+        identity_class: &str,
+        now_ms: i64,
+        event: &CoordinationEventRecord<'_>,
+    ) -> Result<u64, LedgerError> {
+        let key = identity_pool_entry_key(name, challenge_id, owner, identity_class);
+        if event.aggregate_type != "identity_pool"
+            || event.aggregate_id != key
+            || event.event_type != "identity_pool_removed"
+            || event.occurred_at_ms != now_ms
+        {
+            return Err(LedgerError::Degraded(
+                "identity pool event is not bound to the entry removal".into(),
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        let appended = append_event_in_transaction(&mut transaction, event).await?;
+        if appended.replayed {
+            let row = sqlx::query(
+                "SELECT removed_at_ms FROM identity_pool_entries WHERE name = ? AND challenge_id = ? AND owner = ? AND identity_class = ?",
+            )
+            .bind(name)
+            .bind(challenge_id)
+            .bind(owner)
+            .bind(identity_class)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or_else(|| {
+                LedgerError::Degraded("replayed identity pool removal is missing its entry".into())
+            })?;
+            if row.try_get::<Option<i64>, _>("removed_at_ms")? != Some(now_ms) {
+                return Err(LedgerError::Degraded(
+                    "replayed identity pool removal does not match the stored entry".into(),
+                ));
+            }
+            transaction.commit().await?;
+            return Ok(appended.version);
+        }
+        let result = sqlx::query(
+            "UPDATE identity_pool_entries SET removed_at_ms = ?, updated_at_ms = ? WHERE name = ? AND challenge_id = ? AND owner = ? AND identity_class = ? AND removed_at_ms IS NULL",
+        )
+        .bind(now_ms)
+        .bind(now_ms)
+        .bind(name)
+        .bind(challenge_id)
+        .bind(owner)
+        .bind(identity_class)
+        .execute(&mut *transaction)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(LedgerError::Degraded(
+                "identity pool entry is missing or already removed".into(),
+            ));
+        }
+        transaction.commit().await?;
+        Ok(appended.version)
+    }
+
     pub async fn release(&self, id: &str) -> Result<(), LedgerError> {
         let mut transaction = self.pool.begin().await?;
         let result = sqlx::query(
@@ -4243,6 +4520,52 @@ impl SubmissionBroker {
             .await
             .map_err(BrokerError::from)
     }
+}
+
+fn identity_pool_entry_key(
+    name: &str,
+    challenge_id: &str,
+    owner: &str,
+    identity_class: &str,
+) -> String {
+    format!("{name}\u{1f}{challenge_id}\u{1f}{owner}\u{1f}{identity_class}")
+}
+
+fn validate_identity_pool_entry(entry: &IdentityPoolEntry) -> Result<(), LedgerError> {
+    if entry.name.trim().is_empty()
+        || entry.challenge_id.trim().is_empty()
+        || entry.owner.trim().is_empty()
+        || entry.identity_class.trim().is_empty()
+    {
+        return Err(LedgerError::Degraded(
+            "identity pool name, challenge, owner, and class are required".into(),
+        ));
+    }
+    entry
+        .quota()
+        .validate()
+        .map_err(|reason| LedgerError::Degraded(reason.to_string()))
+}
+
+fn identity_pool_entry_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<IdentityPoolEntry, LedgerError> {
+    Ok(IdentityPoolEntry {
+        name: row.try_get("name")?,
+        challenge_id: row.try_get("challenge_id")?,
+        owner: row.try_get("owner")?,
+        identity_class: row.try_get("identity_class")?,
+        frozen: row.try_get("frozen")?,
+        max_reserved_cost_usd: row.try_get("max_reserved_cost_usd")?,
+        max_concurrent_reservations: row
+            .try_get::<Option<i64>, _>("max_concurrent_reservations")?
+            .map(|value| {
+                u32::try_from(value)
+                    .map_err(|_| LedgerError::Degraded("stored concurrent quota is invalid".into()))
+            })
+            .transpose()?,
+        min_interval_seconds: row.try_get("min_interval_seconds")?,
+    })
 }
 
 fn is_within_workspace(path: &Path, root: &Path) -> bool {
@@ -6643,6 +6966,375 @@ model:
             )
             .await
             .expect("ledger still usable after rollback");
+    }
+
+    fn pool_entry(name: &str, frozen: bool, max_cost: Option<f64>) -> IdentityPoolEntry {
+        IdentityPoolEntry {
+            name: name.to_string(),
+            challenge_id: "challenge-a".to_string(),
+            owner: "owner-a".to_string(),
+            identity_class: "solver-primary".to_string(),
+            frozen,
+            max_reserved_cost_usd: max_cost,
+            max_concurrent_reservations: None,
+            min_interval_seconds: None,
+        }
+    }
+
+    fn pool_event<'a>(
+        event_id: &'a str,
+        idempotency_key: &'a str,
+        aggregate_id: &'a str,
+        event_type: &'a str,
+        expected_version: u64,
+        now_ms: i64,
+    ) -> CoordinationEventRecord<'a> {
+        CoordinationEventRecord {
+            event_id,
+            idempotency_key,
+            aggregate_type: "identity_pool",
+            aggregate_id,
+            expected_version,
+            event_type,
+            payload_json: "{}",
+            occurred_at_ms: now_ms,
+        }
+    }
+
+    #[tokio::test]
+    async fn identity_pool_lifecycle_provision_resolve_freeze_thaw_remove() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        let entry = pool_entry("id-a", false, Some(1.0));
+        ledger
+            .provision_identity_pool_entry_audited(
+                &entry,
+                100,
+                &pool_event(
+                    "e1",
+                    "k1",
+                    "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                    "identity_pool_provisioned",
+                    0,
+                    100,
+                ),
+            )
+            .await
+            .expect("provision");
+        let resolved = ledger
+            .resolve_identity_pool("id-a", "challenge-a", "owner-a", "solver-primary")
+            .await
+            .expect("resolve active entry");
+        assert_eq!(
+            resolved.expect("entry").quota(),
+            IdentityQuota {
+                max_reserved_cost_usd: Some(1.0),
+                max_concurrent_reservations: None,
+                min_interval_seconds: None,
+            }
+        );
+        // Freeze makes the entry resolvable but frozen; thaw restores it.
+        ledger
+            .set_identity_pool_frozen_audited(
+                "id-a",
+                "challenge-a",
+                "owner-a",
+                "solver-primary",
+                true,
+                200,
+                &pool_event(
+                    "e2",
+                    "k2",
+                    "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                    "identity_pool_frozen",
+                    1,
+                    200,
+                ),
+            )
+            .await
+            .expect("freeze");
+        let frozen = ledger
+            .get_identity_pool_entry("id-a", "challenge-a", "owner-a", "solver-primary")
+            .await
+            .expect("get")
+            .expect("entry");
+        assert!(frozen.frozen);
+        ledger
+            .set_identity_pool_frozen_audited(
+                "id-a",
+                "challenge-a",
+                "owner-a",
+                "solver-primary",
+                false,
+                300,
+                &pool_event(
+                    "e3",
+                    "k3",
+                    "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                    "identity_pool_thawed",
+                    2,
+                    300,
+                ),
+            )
+            .await
+            .expect("thaw");
+        // Remove terminates the binding; resolve fails closed while other entries exist.
+        ledger
+            .provision_identity_pool_entry_audited(
+                &pool_entry("id-b", false, None),
+                300,
+                &pool_event(
+                    "e4",
+                    "k4",
+                    "id-b\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                    "identity_pool_provisioned",
+                    0,
+                    300,
+                ),
+            )
+            .await
+            .expect("provision id-b");
+        ledger
+            .remove_identity_pool_entry_audited(
+                "id-a",
+                "challenge-a",
+                "owner-a",
+                "solver-primary",
+                400,
+                &pool_event(
+                    "e5",
+                    "k5",
+                    "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                    "identity_pool_removed",
+                    3,
+                    400,
+                ),
+            )
+            .await
+            .expect("remove");
+        assert!(matches!(
+            ledger
+                .resolve_identity_pool("id-a", "challenge-a", "owner-a", "solver-primary")
+                .await,
+            Err(LedgerError::Degraded(_))
+        ));
+        assert!(
+            ledger
+                .get_identity_pool_entry("id-a", "challenge-a", "owner-a", "solver-primary")
+                .await
+                .expect("get")
+                .is_none()
+        );
+        // id-b is still active and authoritative.
+        assert!(
+            ledger
+                .resolve_identity_pool("id-b", "challenge-a", "owner-a", "solver-primary")
+                .await
+                .expect("resolve id-b")
+                .is_some()
+        );
+        assert_eq!(
+            ledger
+                .list_active_identity_pool_entries()
+                .await
+                .expect("list")
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn identity_pool_lifecycle_events_fail_closed_on_binding_and_version() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        let entry = pool_entry("id-a", false, Some(1.0));
+        ledger
+            .provision_identity_pool_entry_audited(
+                &entry,
+                100,
+                &pool_event(
+                    "e1",
+                    "k1",
+                    "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                    "identity_pool_provisioned",
+                    0,
+                    100,
+                ),
+            )
+            .await
+            .expect("provision");
+        // Wrong event type for the transition.
+        assert!(
+            ledger
+                .set_identity_pool_frozen_audited(
+                    "id-a",
+                    "challenge-a",
+                    "owner-a",
+                    "solver-primary",
+                    true,
+                    200,
+                    &pool_event(
+                        "e2",
+                        "k2",
+                        "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                        "identity_pool_provisioned",
+                        1,
+                        200
+                    ),
+                )
+                .await
+                .is_err()
+        );
+        // Event time must match the transition time.
+        assert!(
+            ledger
+                .set_identity_pool_frozen_audited(
+                    "id-a",
+                    "challenge-a",
+                    "owner-a",
+                    "solver-primary",
+                    true,
+                    200,
+                    &pool_event(
+                        "e2",
+                        "k3",
+                        "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                        "identity_pool_frozen",
+                        1,
+                        999
+                    ),
+                )
+                .await
+                .is_err()
+        );
+        // Aggregate id must be the entry key.
+        assert!(
+            ledger
+                .set_identity_pool_frozen_audited(
+                    "id-a",
+                    "challenge-a",
+                    "owner-a",
+                    "solver-primary",
+                    true,
+                    200,
+                    &pool_event("e2", "k4", "other-key", "identity_pool_frozen", 1, 200),
+                )
+                .await
+                .is_err()
+        );
+        // Stale expected version must not overwrite.
+        assert!(
+            ledger
+                .set_identity_pool_frozen_audited(
+                    "id-a",
+                    "challenge-a",
+                    "owner-a",
+                    "solver-primary",
+                    true,
+                    200,
+                    &pool_event(
+                        "e2",
+                        "k5",
+                        "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                        "identity_pool_frozen",
+                        5,
+                        200
+                    ),
+                )
+                .await
+                .is_err()
+        );
+        // None of the rejected transitions may have applied.
+        let entry = ledger
+            .get_identity_pool_entry("id-a", "challenge-a", "owner-a", "solver-primary")
+            .await
+            .expect("get")
+            .expect("entry");
+        assert!(!entry.frozen);
+    }
+
+    #[tokio::test]
+    async fn identity_pool_replay_is_idempotent_and_fail_closed() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        let entry = pool_entry("id-a", false, Some(1.0));
+        let event = pool_event(
+            "e1",
+            "k1",
+            "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+            "identity_pool_provisioned",
+            0,
+            100,
+        );
+        let first = ledger
+            .provision_identity_pool_entry_audited(&entry, 100, &event)
+            .await
+            .expect("provision");
+        assert_eq!(first, 1);
+        let replay = ledger
+            .provision_identity_pool_entry_audited(&entry, 100, &event)
+            .await
+            .expect("replay");
+        assert_eq!(replay, 1);
+        // Replaying the same key with different state fails closed.
+        let tampered = pool_event(
+            "e1",
+            "k1",
+            "id-a\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+            "identity_pool_provisioned",
+            0,
+            100,
+        );
+        let changed = IdentityPoolEntry {
+            max_reserved_cost_usd: Some(9.0),
+            ..entry.clone()
+        };
+        assert!(
+            ledger
+                .provision_identity_pool_entry_audited(&changed, 100, &tampered)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn identity_pool_empty_ledger_falls_back_to_yaml_pool() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        // No active ledger entries: resolve returns None and the YAML pool stays authoritative.
+        assert!(
+            ledger
+                .resolve_identity_pool("id-a", "challenge-a", "owner-a", "solver-primary")
+                .await
+                .expect("resolve empty pool")
+                .is_none()
+        );
+        let dir = tempdir().expect("tempdir");
+        let (cli, workspace) = pool_paths(dir.path());
+        let policy = pool_policy(
+            &dir,
+            "  - name: id-a\n    challenge_id: challenge-a\n    owner: owner-a\n    identity_class: solver-primary\n    max_reserved_cost_usd: 1.0\n",
+        );
+        let request = pool_request(&cli, &workspace, "id-a", "solver-primary", 0.1, 100_000);
+        assert!(policy.admit(&request).allowed);
+        // Once the ledger has any active entry, an unbound identity fails closed.
+        ledger
+            .provision_identity_pool_entry_audited(
+                &pool_entry("id-x", false, None),
+                100,
+                &pool_event(
+                    "e1",
+                    "k1",
+                    "id-x\u{1f}challenge-a\u{1f}owner-a\u{1f}solver-primary",
+                    "identity_pool_provisioned",
+                    0,
+                    100,
+                ),
+            )
+            .await
+            .expect("provision id-x");
+        assert!(matches!(
+            ledger
+                .resolve_identity_pool("id-a", "challenge-a", "owner-a", "solver-primary")
+                .await,
+            Err(LedgerError::Degraded(_))
+        ));
     }
 
     #[tokio::test]

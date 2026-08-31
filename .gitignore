@@ -32,3 +32,4 @@ codex/codex-rs/target*/
 **/storages/
 **/undo-snapshots/
 .mimosa/
+.video_agent/
