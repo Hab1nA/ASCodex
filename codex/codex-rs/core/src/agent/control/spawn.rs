@@ -1837,12 +1837,14 @@ pub(super) fn apply_stage_brief_workspace_acl(
         ));
     }
     let policy = FileSystemSandboxPolicy::restricted(entries);
+    // Solver profile always resolves the OS-level network sandbox to Restricted, regardless of
+    // the egress allowlist: the allowlist only narrows the in-process egress preflight while the
+    // sandbox layer denies the network outright as the outer boundary. The parent's network mode
+    // is never inherited, so a previously-enabled parent cannot leak egress into a solver.
     let profile = PermissionProfile::from_runtime_permissions_with_enforcement(
         SandboxEnforcement::Managed,
         &policy,
-        // Preserve the parent's already-constrained network mode; the signed
-        // workspace ACL only narrows filesystem visibility.
-        config.permissions.network_sandbox_policy(),
+        codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
     );
     config
         .permissions

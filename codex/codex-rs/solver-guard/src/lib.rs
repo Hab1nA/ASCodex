@@ -307,6 +307,21 @@ impl Default for EgressPolicy {
     }
 }
 
+/// OS-level network sandbox mode for solver-profile child processes. Always `Restricted` for
+/// solver work: the allowlist only narrows the in-process egress preflight, while the sandbox
+/// layer denies the network outright as the outer boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SolverNetworkMode {
+    Restricted,
+}
+
+/// Resolve the OS-level network sandbox mode from the typed egress policy. Fail-closed: any
+/// policy that is deny-all, empty, or (by construction) has any allowlist still resolves to
+/// `Restricted`; the allowlist never upgrades the sandbox.
+pub fn resolve_solver_network_mode(_egress: &EgressPolicy) -> SolverNetworkMode {
+    SolverNetworkMode::Restricted
+}
+
 fn is_valid_hostname(host: &str) -> bool {
     !host.is_empty()
         && host.len() <= 253
@@ -5853,6 +5868,40 @@ mod tests {
         assert_eq!(names, vec!["chief-a.json", "chief-b.json"]);
         // Missing directory fails closed.
         assert!(collect_wake_files(&dir.path().join("missing")).is_err());
+    }
+
+    #[test]
+    fn solver_network_mode_deny_all_or_empty_fails_closed_to_restricted() {
+        assert_eq!(
+            resolve_solver_network_mode(&EgressPolicy {
+                deny_all: true,
+                allowed_domains: vec!["play.bohrium.com".to_string()],
+                denied_domains: Vec::new(),
+            }),
+            SolverNetworkMode::Restricted
+        );
+        assert_eq!(
+            resolve_solver_network_mode(&EgressPolicy {
+                deny_all: false,
+                allowed_domains: Vec::new(),
+                denied_domains: Vec::new(),
+            }),
+            SolverNetworkMode::Restricted
+        );
+    }
+
+    #[test]
+    fn solver_network_mode_allowlist_still_restricts_os_layer() {
+        // Even with an allowlist the OS sandbox layer stays Restricted; the allowlist only
+        // narrows the in-process egress preflight (domains the model may reach).
+        assert_eq!(
+            resolve_solver_network_mode(&EgressPolicy {
+                deny_all: false,
+                allowed_domains: vec!["play.bohrium.com".to_string()],
+                denied_domains: Vec::new(),
+            }),
+            SolverNetworkMode::Restricted
+        );
     }
 
     #[tokio::test]
