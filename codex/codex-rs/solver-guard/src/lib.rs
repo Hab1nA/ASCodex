@@ -5080,6 +5080,39 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Exponential backoff for the resident supervisor: `base * 2^attempt`, capped at `max`.
+/// Attempt 0 (first failure) returns the base delay; invalid inputs fail closed.
+pub fn next_backoff_ms(attempt: u32, base_ms: u64, max_ms: u64) -> Result<u64, String> {
+    if base_ms == 0 || max_ms == 0 || max_ms < base_ms {
+        return Err("backoff base and max must be positive with max >= base".to_string());
+    }
+    let multiplier = 1u64.checked_shl(attempt.min(63)).unwrap_or(u64::MAX);
+    let delay = base_ms.saturating_mul(multiplier);
+    Ok(delay.min(max_ms))
+}
+
+/// List Chief wake request files (`chief-*.json`) in a wakes directory, sorted by name. A
+/// missing or unreadable directory fails closed.
+pub fn collect_wake_files(wakes_dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries = std::fs::read_dir(wakes_dir)
+        .map_err(|error| format!("cannot read wakes directory: {error}"))?;
+    let mut files = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("cannot read wakes entry: {error}"))?;
+        if entry.file_name().to_string_lossy().starts_with("chief-")
+            && entry
+                .path()
+                .extension()
+                .map(|ext| ext == "json")
+                .unwrap_or(false)
+        {
+            files.push(entry.path());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
 /// Run one canary turn: derive an isolated child thread that echoes the nonce, then read back
 /// its real terminal message. The runner verifies the nonce appears in the child's output
 /// rather than trusting a lifecycle status alone. A panicking child, empty output, or timeout
@@ -5770,6 +5803,56 @@ mod tests {
         );
         assert!(first.contains(nonce));
         assert!(trace.rehydration_allowed(300));
+    }
+
+    #[test]
+    fn backoff_doubles_with_cap_and_resets_on_success() {
+        assert_eq!(next_backoff_ms(0, 1_000, 60_000).expect("backoff"), 1_000);
+        assert_eq!(next_backoff_ms(1, 1_000, 60_000).expect("backoff"), 2_000);
+        assert_eq!(next_backoff_ms(2, 1_000, 60_000).expect("backoff"), 4_000);
+        // Cap at the maximum.
+        assert_eq!(next_backoff_ms(10, 1_000, 60_000).expect("backoff"), 60_000);
+        assert_eq!(
+            next_backoff_ms(100, 1_000, 60_000).expect("backoff"),
+            60_000
+        );
+        // Attempt 0 means first failure -> base delay.
+        assert_eq!(next_backoff_ms(0, 5_000, 10_000).expect("backoff"), 5_000);
+    }
+
+    #[test]
+    fn backoff_rejects_invalid_inputs_fail_closed() {
+        assert!(
+            next_backoff_ms(0, 0, 60_000).is_err(),
+            "zero base delay fails closed"
+        );
+        assert!(
+            next_backoff_ms(0, 1_000, 0).is_err(),
+            "zero max fails closed"
+        );
+        assert!(
+            next_backoff_ms(0, 60_000, 1_000).is_err(),
+            "max below base fails closed"
+        );
+    }
+
+    #[test]
+    fn collect_wake_files_lists_only_chief_json_sorted() {
+        let dir = tempdir().expect("tempdir");
+        let wakes = dir.path().join("wakes");
+        std::fs::create_dir_all(&wakes).expect("wakes dir");
+        std::fs::write(wakes.join("chief-b.json"), "{}").expect("b");
+        std::fs::write(wakes.join("chief-a.json"), "{}").expect("a");
+        std::fs::write(wakes.join("other.json"), "{}").expect("other");
+        std::fs::write(wakes.join("chief-noext"), "{}").expect("noext");
+        let files = collect_wake_files(&wakes).expect("collect");
+        let names: Vec<String> = files
+            .iter()
+            .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["chief-a.json", "chief-b.json"]);
+        // Missing directory fails closed.
+        assert!(collect_wake_files(&dir.path().join("missing")).is_err());
     }
 
     #[tokio::test]

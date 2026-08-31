@@ -36,6 +36,10 @@ path = "src/bin/wake_consumer.rs"
 name = "ascodex-canary-runner"
 path = "src/bin/canary_runner.rs"
 
+[[bin]]
+name = "ascodex-supervisor"
+path = "src/bin/supervisor.rs"
+
 
 [lints]
 workspace = true
