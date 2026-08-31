@@ -5074,6 +5074,31 @@ pub fn validate_contract_files(
     Ok(())
 }
 
+/// Solver-profile contract preflight: validates the typed contract and canonical fingerprint
+/// input against the expected challenge and requires a Known contract, exactly as the Core
+/// submit path and app-server resume do. Outside solver mode the gate is not applied and the
+/// preflight admits (Ok(true)); in solver mode a malformed/missing/mismatched contract is
+/// Err (fail-closed).
+pub fn contract_preflight_allowed(
+    contract_file: &Path,
+    fingerprint_input_file: &Path,
+    expected_challenge_id: &str,
+    now_ms: i64,
+    solver_mode: bool,
+) -> Result<bool, String> {
+    if !solver_mode {
+        return Ok(true);
+    }
+    validate_contract_files(
+        contract_file,
+        fingerprint_input_file,
+        expected_challenge_id,
+        Some(Role::Solver),
+        now_ms,
+    )?;
+    Ok(true)
+}
+
 fn is_within_workspace(path: &Path, root: &Path) -> bool {
     let Ok(path) = path.canonicalize() else {
         return false;
@@ -5868,6 +5893,73 @@ mod tests {
         assert_eq!(names, vec!["chief-a.json", "chief-b.json"]);
         // Missing directory fails closed.
         assert!(collect_wake_files(&dir.path().join("missing")).is_err());
+    }
+
+    #[test]
+    fn contract_preflight_requires_known_contract_in_solver_mode() {
+        let dir = tempdir().expect("tempdir");
+        let contract = dir.path().join("contract.json");
+        let fingerprint = dir.path().join("input.json");
+        let fingerprint_input =
+            br#"{"challenge_id":"challenge-a","contract_version":"v1","required_submission":"arm"}"#;
+        std::fs::write(&fingerprint, fingerprint_input).expect("input");
+        let digest = sha256_bytes(fingerprint_input);
+        let fingerprint_hex: String = digest.chars().take(16).collect();
+        let write_contract = |status: &str, adapter: Option<&str>| {
+            let contract_json = serde_json::json!({
+                "schema_version": "ascodex-coordination/v1",
+                "challenge_id": "challenge-a",
+                "contract_version": "v1",
+                "fingerprint": fingerprint_hex,
+                "required_submission": "arm",
+                "status": status,
+                "adapter_id": adapter,
+                "round_start_ms": 1,
+                "round_end_ms": 999,
+            });
+            std::fs::write(&contract, contract_json.to_string()).expect("contract");
+        };
+        write_contract("known", Some("adapter-v1"));
+        assert!(
+            contract_preflight_allowed(&contract, &fingerprint, "challenge-a", 300, true,)
+                .expect("known contract passes in solver mode")
+        );
+        // Unknown contract fails closed in solver mode.
+        write_contract("unknown", None);
+        assert!(
+            contract_preflight_allowed(&contract, &fingerprint, "challenge-a", 300, true,).is_err(),
+            "unknown contract rejected in solver mode"
+        );
+        // Non-solver mode permits regardless (behaviour unchanged outside the profile).
+        write_contract("unknown", None);
+        assert!(
+            contract_preflight_allowed(&contract, &fingerprint, "challenge-a", 300, false,)
+                .expect("non-solver mode not gated")
+        );
+    }
+
+    #[test]
+    fn contract_preflight_fails_closed_on_missing_files_or_mismatch() {
+        let dir = tempdir().expect("tempdir");
+        let contract = dir.path().join("contract.json");
+        let fingerprint = dir.path().join("input.json");
+        // Empty files fail closed in solver mode.
+        std::fs::write(&contract, b"{}").expect("contract");
+        std::fs::write(&fingerprint, b"{}").expect("input");
+        assert!(
+            contract_preflight_allowed(&contract, &fingerprint, "challenge-a", 300, true,).is_err()
+        );
+        // Missing file fails closed.
+        assert!(
+            contract_preflight_allowed(
+                &dir.path().join("missing.json"),
+                &fingerprint,
+                "challenge-a",
+                300,
+                true,
+            )
+            .is_err()
+        );
     }
 
     #[test]

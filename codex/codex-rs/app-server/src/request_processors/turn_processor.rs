@@ -31,6 +31,43 @@ pub(super) fn validate_user_input_image_urls(
     Ok(())
 }
 
+// Solver profile: starting a turn begins solver work on a challenge, which must pass the same
+// typed contract gate as spawn/resume before the solver can work. Reads the contract file,
+// canonical fingerprint input, and challenge id from the environment (set by ascodex.ps1 in
+// SolverMode) and validates them with the shared solver-guard preflight. Fail-closed: missing
+// environment or an invalid/unknown contract blocks the turn. Outside solver mode this is a
+// no-op, preserving official behavior.
+fn ascodex_turn_start_contract_preflight() -> Result<(), JSONRPCErrorError> {
+    let solver_mode = std::env::var("ASCODEX_SOLVER_MODE")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false);
+    if !solver_mode {
+        return Ok(());
+    }
+    let required = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| invalid_request(format!("ASCodex contract gate requires {name}")))
+    };
+    let contract_file = required("ASCODEX_CONTRACT_FILE")?;
+    let fingerprint_input_file = required("ASCODEX_CONTRACT_INPUT_FILE")?;
+    let challenge_id = required("ASCODEX_CHALLENGE_ID")?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or_default();
+    codex_solver_guard::contract_preflight_allowed(
+        std::path::Path::new(&contract_file),
+        std::path::Path::new(&fingerprint_input_file),
+        &challenge_id,
+        now_ms,
+        true,
+    )
+    .map(|_| ())
+    .map_err(|error| invalid_request(format!("ASCodex contract gate blocked: {error}")))
+}
+
 fn validate_response_item_image_urls(items: &[ResponseItem]) -> Result<(), JSONRPCErrorError> {
     if items.iter().any(|item| match item {
         ResponseItem::Message { content, .. } => content.iter().any(|item| {
@@ -503,6 +540,7 @@ impl TurnRequestProcessor {
         app_server_client_name: Option<String>,
         app_server_client_version: Option<String>,
     ) -> Result<TurnStartResponse, JSONRPCErrorError> {
+        ascodex_turn_start_contract_preflight()?;
         let (thread_id, thread) =
             self.load_thread(&params.thread_id)
                 .await

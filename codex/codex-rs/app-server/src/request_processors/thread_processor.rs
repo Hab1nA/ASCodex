@@ -4746,6 +4746,13 @@ impl ThreadRequestProcessor {
         app_server_client_version: Option<String>,
         client_mcp_extensions: ClientMcpExtensions,
     ) -> Result<(), JSONRPCErrorError> {
+        // Solver profile: forking a new thread creates a fresh solver session, which must pass
+        // the same typed contract gate as spawn/resume before it can be worked on.
+        if let Err(error) = ascodex_resume_contract_preflight(ascodex_now_unix_timestamp_ms()).await
+        {
+            self.outgoing.send_error(request_id, error).await;
+            return Ok(());
+        }
         let ThreadForkParams {
             thread_id,
             last_turn_id,
