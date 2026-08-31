@@ -858,6 +858,19 @@ fn solver_guard_egress_blocks(tool_name: &str, input: &Value) -> codex_solver_gu
     {
         return codex_solver_guard::RpcDecision::Block;
     }
+    // Startup trust anchor: the adjacent `<policy>.sig` must verify under the compile-time key.
+    let signature_hex = std::fs::read_to_string(format!("{}.sig", canonical_path.display()))
+        .map(|text| text.trim().to_string())
+        .unwrap_or_default();
+    if codex_solver_guard::verify_policy_signature(
+        &policy_bytes,
+        &signature_hex,
+        codex_solver_guard::ASCODEX_TRUST_ANCHOR_PUBLIC_KEY_HEX,
+    )
+    .is_err()
+    {
+        return codex_solver_guard::RpcDecision::Block;
+    }
     let Ok(policy) = codex_solver_guard::Policy::from_yaml(&String::from_utf8_lossy(&policy_bytes))
     else {
         return codex_solver_guard::RpcDecision::Block;

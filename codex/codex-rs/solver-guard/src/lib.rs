@@ -5050,6 +5050,51 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Compile-time Ed25519 public key (raw 32 bytes, hex) that anchors policy authenticity.
+///
+/// This is the startup trust anchor: it is baked into the binary, so a local administrator who
+/// can mutate environment variables or policy files at runtime cannot replace the key without
+/// rebuilding the binary (which leaves a source/git trace). The operator provisions the matching
+/// private key out-of-band; the private key must never be committed, printed, or stored in the
+/// workspace. This is a placeholder key for local dry-run; production must rotate it.
+pub const ASCODEX_TRUST_ANCHOR_PUBLIC_KEY_HEX: &str =
+    "769f138d63fa14ab907595f66142da266c8741e9ad1dc9a2eae2f4cf924cdf8e";
+
+/// Verify an Ed25519 signature (hex-encoded, 64 bytes) over `data` against the trust anchor.
+/// Malformed hex, wrong lengths, and empty data fail closed.
+pub fn verify_policy_signature(
+    data: &[u8],
+    signature_hex: &str,
+    public_key_hex: &str,
+) -> Result<(), String> {
+    if data.is_empty() {
+        return Err("policy signature data is empty".to_string());
+    }
+    let signature_bytes = decode_hex_exact(signature_hex, 64, "signature")?;
+    let public_key_bytes = decode_hex_exact(public_key_hex, 32, "public key")?;
+    let public_key_bytes: [u8; 32] = public_key_bytes
+        .try_into()
+        .map_err(|_| "trust anchor public key is invalid".to_string())?;
+    let signature_bytes: [u8; 64] = signature_bytes
+        .try_into()
+        .map_err(|_| "policy signature is invalid".to_string())?;
+    let public_key = ed25519_dalek::VerifyingKey::from_bytes(&public_key_bytes)
+        .map_err(|_| "trust anchor public key is invalid".to_string())?;
+    let signature = ed25519_dalek::Signature::from_bytes(&signature_bytes);
+    use ed25519_dalek::Verifier as _;
+    public_key
+        .verify_strict(data, &signature)
+        .map_err(|_| "policy signature verification failed".to_string())
+}
+
+fn decode_hex_exact(value: &str, expected_len: usize, what: &str) -> Result<Vec<u8>, String> {
+    let bytes = hex::decode(value).map_err(|_| format!("{what} is not valid hex"))?;
+    if bytes.len() != expected_len {
+        return Err(format!("{what} must be {expected_len} bytes"));
+    }
+    Ok(bytes)
+}
+
 fn role_name(role: Role) -> &'static str {
     match role {
         Role::Chief => "chief",
@@ -6957,6 +7002,80 @@ model:
             network_tool_egress_preflight("webFetch", &input, &policy, false),
             RpcDecision::Allow
         );
+    }
+
+    #[test]
+    fn policy_signature_verifies_and_rejects_tampering() {
+        use ed25519_dalek::Signer;
+        use rand_core::CryptoRngCore;
+        let mut rng = rand_core::OsRng;
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let public_key = signing_key.verifying_key();
+        let public_hex = public_key
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        let policy_bytes = b"channel:\n  harbor_only: true\n";
+        let signature = signing_key.sign(policy_bytes);
+        let signature_hex = signature
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        verify_policy_signature(policy_bytes, &signature_hex, &public_hex)
+            .expect("valid signature passes");
+        // Tampered policy must fail.
+        assert!(
+            verify_policy_signature(
+                b"channel:\n  harbor_only: false\n",
+                &signature_hex,
+                &public_hex
+            )
+            .is_err()
+        );
+        // Wrong signature must fail.
+        let other = ed25519_dalek::SigningKey::generate(&mut rng);
+        let wrong_hex = other
+            .sign(policy_bytes)
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        assert!(verify_policy_signature(policy_bytes, &wrong_hex, &public_hex).is_err());
+    }
+
+    #[test]
+    fn policy_signature_rejects_malformed_hex_and_empty_inputs() {
+        use ed25519_dalek::Signer;
+        use rand_core::CryptoRngCore;
+        let mut rng = rand_core::OsRng;
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let public_hex = signing_key
+            .verifying_key()
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        assert!(verify_policy_signature(b"data", "", &public_hex).is_err());
+        assert!(verify_policy_signature(b"data", "zz", &public_hex).is_err());
+        assert!(verify_policy_signature(b"data", "ab", "").is_err());
+        assert!(verify_policy_signature(b"", "ab", &public_hex).is_err());
+    }
+
+    #[test]
+    fn compiled_in_trust_anchor_is_a_valid_ed25519_public_key() {
+        // The anchor is a compile-time constant, so a runtime environment or file change cannot
+        // replace it without rebuilding the binary. This test only checks the anchor format is a
+        // parseable Ed25519 public key; the actual key is provisioned by the operator.
+        let bytes = hex::decode(ASCODEX_TRUST_ANCHOR_PUBLIC_KEY_HEX).expect("anchor is valid hex");
+        assert_eq!(
+            bytes.len(),
+            32,
+            "anchor must be a 32-byte Ed25519 public key"
+        );
+        let bytes: [u8; 32] = bytes.try_into().expect("anchor is 32 bytes");
+        ed25519_dalek::VerifyingKey::from_bytes(&bytes).expect("anchor parses as Ed25519 key");
     }
 
     fn write_channel_probe_fixture(root: &Path) -> (PathBuf, PathBuf, PathBuf) {

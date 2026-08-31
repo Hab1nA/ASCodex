@@ -35,6 +35,8 @@ workspace = true
 [dependencies]
 chrono = { workspace = true }
 codex-ascodex-coordination = { workspace = true }
+ed25519-dalek = { workspace = true }
+hex = "0.4"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -44,5 +46,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync"] }
 
 [dev-dependencies]
+rand_core = { version = "0.6", features = ["getrandom"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

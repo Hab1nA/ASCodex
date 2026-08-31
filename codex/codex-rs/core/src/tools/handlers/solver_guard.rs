@@ -567,6 +567,21 @@ fn validate_policy_file_digest(policy_file: &str, expected_digest: &str) -> Resu
             "policy digest mismatch: expected {expected_digest}, got {actual_digest}"
         ));
     }
+    // Startup trust anchor: the policy must also carry an Ed25519 signature (adjacent
+    // `<policy>.sig` file) valid under the compile-time public key. A local administrator who
+    // can rewrite the policy file or its digest cannot forge a signature without the private
+    // key, which is provisioned out-of-band and never stored in the workspace.
+    let signature_file = format!("{policy_file}.sig");
+    let signature_hex = std::fs::read_to_string(&signature_file)
+        .map_err(|error| format!("cannot read policy signature file: {error}"))?
+        .trim()
+        .to_string();
+    codex_solver_guard::verify_policy_signature(
+        &policy_bytes,
+        &signature_hex,
+        codex_solver_guard::ASCODEX_TRUST_ANCHOR_PUBLIC_KEY_HEX,
+    )
+    .map_err(|error| format!("policy signature gate blocked: {error}"))?;
     Ok(())
 }
 
@@ -606,7 +621,16 @@ mod tests {
             .expect_err("short policy digest must fail closed");
         assert!(error.contains("64-character SHA-256"));
 
-        validate_policy_file_digest(policy_path, &digest).expect("matching digest passes");
+        // A matching digest is not enough: the startup trust anchor requires an Ed25519
+        // signature file adjacent to the policy. Without it the gate fails closed.
+        let error = validate_policy_file_digest(policy_path, &digest)
+            .expect_err("missing policy signature must fail closed");
+        assert!(error.contains("policy signature"));
+
+        std::fs::write(format!("{policy_path}.sig"), "deadbeef").expect("write bogus signature");
+        let error = validate_policy_file_digest(policy_path, &digest)
+            .expect_err("invalid policy signature must fail closed");
+        assert!(error.contains("policy signature"));
 
         std::fs::write(&policy_path, "channel: {}\nidentity: {}\n").expect("tamper policy");
         let error = validate_policy_file_digest(policy_path, &digest)
