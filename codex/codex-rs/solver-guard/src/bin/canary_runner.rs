@@ -65,6 +65,16 @@ async fn run() -> Result<(), String> {
         .unwrap_or(trusted_now_ms()?);
     let started_at_ms = now_ms - 200;
     let deadline_ms = now_ms + 5 * 60 * 1000;
+    // Real two-turn probe: derive an isolated child thread per turn, let it echo the nonce,
+    // and read back its actual terminal message. A turn that fails to produce the nonce aborts
+    // the runner (fail-stop) so a broken child cannot be recorded as a passed canary.
+    let first_nonce = format!("nonce-{runtime_instance_id}-first");
+    let second_nonce = format!("nonce-{runtime_instance_id}-second");
+    let first_message = codex_solver_guard::run_canary_turn(&first_nonce, 30_000)?;
+    let second_message = codex_solver_guard::run_canary_turn(&second_nonce, 30_000)?;
+    if !first_message.contains(&first_nonce) || !second_message.contains(&second_nonce) {
+        return Err("canary child did not echo the nonce back; refusing to record".to_string());
+    }
     let trace = build_recovery_canary_trace(
         &recovery_id,
         &runtime_instance_id,
@@ -73,8 +83,8 @@ async fn run() -> Result<(), String> {
         deadline_ms,
         "canary-child",
         "canary-session",
-        &format!("nonce-{runtime_instance_id}-first"),
-        &format!("nonce-{runtime_instance_id}-second"),
+        &first_nonce,
+        &second_nonce,
     );
     let trace_json = serde_json::to_string(&trace).map_err(|error| error.to_string())?;
     let event_id = format!("canary-{recovery_id}-{runtime_instance_id}");

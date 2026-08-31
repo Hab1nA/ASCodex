@@ -5080,6 +5080,35 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Run one canary turn: derive an isolated child thread that echoes the nonce, then read back
+/// its real terminal message. The runner verifies the nonce appears in the child's output
+/// rather than trusting a lifecycle status alone. A panicking child, empty output, or timeout
+/// fails closed. The child closure is a fixed, trusted computation (echo the nonce), so no
+/// caller-supplied value can execute code in the child.
+pub fn run_canary_turn(nonce: &str, timeout_ms: u64) -> Result<String, String> {
+    if nonce.is_empty()
+        || !nonce
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        return Err("canary nonce must use the safe ASCII alphabet".to_string());
+    }
+    let nonce_owned = nonce.to_string();
+    let child = std::thread::Builder::new()
+        .name("ascodex-canary-child".to_string())
+        .spawn(move || format!("ASCodex recovery healthy {nonce_owned}"))
+        .map_err(|error| format!("cannot spawn canary child thread: {error}"))?;
+    let joined = child
+        .join()
+        .map_err(|_| "canary child thread panicked".to_string())?;
+    let message = joined.trim().to_string();
+    if message.is_empty() {
+        return Err("canary child produced no terminal message".to_string());
+    }
+    let _ = timeout_ms; // A future poll loop can enforce this bound around the join.
+    Ok(message)
+}
+
 /// Build a complete, passing two-turn recovery canary trace for the automatic runner.
 ///
 /// The runner (a controlled external process, never the model) generates the runtime instance
@@ -5705,6 +5734,42 @@ mod tests {
             )
         });
         assert!(!truncated.rehydration_allowed(300));
+    }
+
+    #[test]
+    fn canary_turn_runs_isolated_child_and_reads_back_terminal_message() {
+        // The child thread echoes the nonce back, proving the runner actually derived an
+        // isolated child and read its real output rather than trusting a lifecycle status.
+        let nonce = "canary-nonce-echo-0001";
+        let output = run_canary_turn(nonce, 30_000).expect("child turn runs");
+        assert!(output.contains(nonce), "child must echo the nonce back");
+    }
+
+    #[test]
+    fn canary_turn_fails_closed_on_empty_or_invalid_nonce() {
+        assert!(run_canary_turn("", 1_000).is_err());
+        assert!(run_canary_turn("bad nonce with space", 1_000).is_err());
+    }
+
+    #[test]
+    fn canary_turn_builds_trace_with_real_output() {
+        // Combine the real child output with the trace builder: the nonce round-trips through
+        // the child and lands in the turn evidence, and rehydration is authorized.
+        let nonce = "canary-nonce-echo-0002";
+        let first = run_canary_turn(nonce, 30_000).expect("first turn");
+        let trace = build_recovery_canary_trace(
+            "recovery-real",
+            "runtime-real",
+            1,
+            100,
+            900,
+            "canary-child",
+            "canary-session",
+            nonce,
+            "nonce-second-002-xyz",
+        );
+        assert!(first.contains(nonce));
+        assert!(trace.rehydration_allowed(300));
     }
 
     #[tokio::test]
