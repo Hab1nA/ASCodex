@@ -1919,72 +1919,14 @@ fn validate_contract_for_spawn(
 ) -> CodexResult<()> {
     let contract_file = required_ascodex_env("ASCODEX_CONTRACT_FILE")?;
     let fingerprint_input_file = required_ascodex_env("ASCODEX_CONTRACT_INPUT_FILE")?;
-    validate_contract_files(
-        binding,
-        role,
+    codex_solver_guard::validate_contract_files(
         std::path::Path::new(&contract_file),
         std::path::Path::new(&fingerprint_input_file),
+        &binding.challenge_id,
+        Some(role),
         now_ms,
     )
-}
-
-pub(super) fn validate_contract_files(
-    binding: &codex_solver_guard::ThreadCycleBinding,
-    role: codex_ascodex_coordination::Role,
-    contract_file: &std::path::Path,
-    fingerprint_input_file: &std::path::Path,
-    now_ms: i64,
-) -> CodexResult<()> {
-    for (name, path) in [
-        ("ASCODEX_CONTRACT_FILE", contract_file),
-        ("ASCODEX_CONTRACT_INPUT_FILE", fingerprint_input_file),
-    ] {
-        if path.as_os_str().is_empty() || !path.is_absolute() {
-            return Err(CodexErr::InvalidRequest(format!(
-                "ASCodex contract gate blocked: {name} must be an absolute path"
-            )));
-        }
-    }
-    let contract_bytes = std::fs::read(contract_file).map_err(|error| {
-        CodexErr::InvalidRequest(format!(
-            "ASCodex contract gate blocked: cannot read ChallengeContract: {error}"
-        ))
-    })?;
-    let fingerprint_input = std::fs::read(fingerprint_input_file).map_err(|error| {
-        CodexErr::InvalidRequest(format!(
-            "ASCodex contract gate blocked: cannot read canonical fingerprint input: {error}"
-        ))
-    })?;
-    let contract: codex_ascodex_coordination::ChallengeContract =
-        serde_json::from_slice(&contract_bytes).map_err(|error| {
-            CodexErr::InvalidRequest(format!(
-                "ASCodex contract gate blocked: invalid ChallengeContract JSON: {error}"
-            ))
-        })?;
-    if contract.challenge_id != binding.challenge_id {
-        return Err(CodexErr::InvalidRequest(
-            "ASCodex contract gate blocked: contract challenge does not match the durable cycle binding"
-                .into(),
-        ));
-    }
-    contract
-        .verify_fingerprint_input(&fingerprint_input)
-        .map_err(|error| {
-            CodexErr::InvalidRequest(format!("ASCodex contract gate blocked: {error}"))
-        })?;
-    contract
-        .validate(&binding.challenge_id, now_ms)
-        .map_err(|error| {
-            CodexErr::InvalidRequest(format!("ASCodex contract gate blocked: {error}"))
-        })?;
-    if role == codex_ascodex_coordination::Role::Solver
-        && contract.status != codex_ascodex_coordination::ContractStatus::Known
-    {
-        return Err(CodexErr::InvalidRequest(
-            "ASCodex contract gate blocked: solver dispatch requires a Known contract".into(),
-        ));
-    }
-    Ok(())
+    .map_err(|error| CodexErr::InvalidRequest(format!("ASCodex contract gate blocked: {error}")))
 }
 
 async fn resolve_parent_cycle_binding(

@@ -412,16 +412,15 @@ async fn ascodex_chief_spawn_lease_requires_spawn_child_authority() {
 
 #[test]
 fn ascodex_contract_gate_requires_absolute_paths() {
-    let binding = test_cycle_binding("challenge-a");
-    let error = super::spawn::validate_contract_files(
-        &binding,
-        codex_ascodex_coordination::Role::Monitor,
+    let error = codex_solver_guard::validate_contract_files(
         std::path::Path::new("relative-contract.json"),
         std::path::Path::new("/absolute-input.json"),
+        "challenge-a",
+        Some(codex_ascodex_coordination::Role::Monitor),
         300,
     )
     .expect_err("relative contract paths must fail closed");
-    assert!(error.to_string().contains("absolute path"));
+    assert!(error.contains("absolute path"));
 }
 
 #[test]
@@ -440,7 +439,6 @@ fn ascodex_contract_gate_verifies_fingerprint_binding_and_solver_status() {
     let input_path = dir.path().join("fingerprint-input.json");
     std::fs::write(&input_path, canonical_input).expect("write canonical input");
 
-    let binding = test_cycle_binding("challenge-a");
     let known_contract = format!(
         r#"{{
             "schema_version": "ascodex-coordination/v1",
@@ -455,11 +453,11 @@ fn ascodex_contract_gate_verifies_fingerprint_binding_and_solver_status() {
         }}"#
     );
     std::fs::write(&contract_path, &known_contract).expect("write known contract");
-    super::spawn::validate_contract_files(
-        &binding,
-        codex_ascodex_coordination::Role::Solver,
+    codex_solver_guard::validate_contract_files(
         &contract_path,
         &input_path,
+        "challenge-a",
+        Some(codex_ascodex_coordination::Role::Solver),
         300,
     )
     .expect("known solver contract must pass");
@@ -469,15 +467,15 @@ fn ascodex_contract_gate_verifies_fingerprint_binding_and_solver_status() {
         known_contract.replace("challenge-a", "challenge-other"),
     )
     .expect("write mismatched contract");
-    let error = super::spawn::validate_contract_files(
-        &binding,
-        codex_ascodex_coordination::Role::Solver,
+    let error = codex_solver_guard::validate_contract_files(
         &contract_path,
         &input_path,
+        "challenge-a",
+        Some(codex_ascodex_coordination::Role::Solver),
         300,
     )
     .expect_err("contract challenge mismatch must fail closed");
-    assert!(error.to_string().contains("challenge does not match"));
+    assert!(error.contains("challenge"));
 
     std::fs::write(
         &contract_path,
@@ -487,33 +485,15 @@ fn ascodex_contract_gate_verifies_fingerprint_binding_and_solver_status() {
             .replace("\"adapter_id\": \"adapter-v1\"", "\"adapter_id\": null"),
     )
     .expect("write unknown contract");
-    let error = super::spawn::validate_contract_files(
-        &binding,
-        codex_ascodex_coordination::Role::Solver,
+    let error = codex_solver_guard::validate_contract_files(
         &contract_path,
         &input_path,
+        "challenge-a",
+        Some(codex_ascodex_coordination::Role::Solver),
         300,
     )
     .expect_err("solver dispatch with an unknown contract must fail closed");
-    assert!(error.to_string().contains("requires a Known contract"));
-}
-
-fn test_cycle_binding(challenge_id: &str) -> codex_solver_guard::ThreadCycleBinding {
-    codex_solver_guard::ThreadCycleBinding {
-        binding_id: "binding-a".into(),
-        thread_id: "thread-child".into(),
-        parent_thread_id: Some("thread-chief".into()),
-        agent_id: "thread-child".into(),
-        session_id: "session-a".into(),
-        campaign_id: "campaign-a".into(),
-        challenge_id: challenge_id.into(),
-        cycle_id: "cycle-a".into(),
-        cycle_event_version: 1,
-        chief_lease_id: "chief-lease-a".into(),
-        role: codex_ascodex_coordination::Role::Solver,
-        issued_at_ms: 1,
-        revoked_at_ms: None,
-    }
+    assert!(error.contains("Known"));
 }
 
 fn text_input(text: &str) -> Vec<UserInput> {

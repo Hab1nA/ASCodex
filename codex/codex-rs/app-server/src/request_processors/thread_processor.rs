@@ -84,6 +84,32 @@ async fn ascodex_resume_canary_preflight(
     })
 }
 
+/// Solver-mode resume requires the typed ChallengeContract that binds this campaign/challenge.
+/// The challenge id comes from the environment (issued with the cycle); a missing or
+/// mismatched contract fails closed before the thread state machine can rehydrate a solver.
+async fn ascodex_resume_contract_preflight(now_ms: i64) -> Result<(), JSONRPCErrorError> {
+    if !ascodex_solver_mode_enabled() {
+        return Ok(());
+    }
+    let required = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| invalid_request(format!("ASCodex contract gate requires {name}")))
+    };
+    let contract_file = required("ASCODEX_CONTRACT_FILE")?;
+    let fingerprint_input_file = required("ASCODEX_CONTRACT_INPUT_FILE")?;
+    let challenge_id = required("ASCODEX_CHALLENGE_ID")?;
+    codex_solver_guard::validate_contract_files(
+        std::path::Path::new(&contract_file),
+        std::path::Path::new(&fingerprint_input_file),
+        &challenge_id,
+        Some(codex_solver_guard::CoordinationRole::Solver),
+        now_ms,
+    )
+    .map_err(|error| invalid_request(format!("ASCodex contract gate blocked: {error}")))
+}
+
 async fn stage_pending_project_metadata(
     thread_manager: &ThreadManager,
     thread_store: &dyn ThreadStore,
@@ -3612,6 +3638,11 @@ impl ThreadRequestProcessor {
         if let Err(error) =
             ascodex_resume_canary_preflight(&params.thread_id, ascodex_now_unix_timestamp_ms())
                 .await
+        {
+            self.outgoing.send_error(request_id, error).await;
+            return Ok(());
+        }
+        if let Err(error) = ascodex_resume_contract_preflight(ascodex_now_unix_timestamp_ms()).await
         {
             self.outgoing.send_error(request_id, error).await;
             return Ok(());

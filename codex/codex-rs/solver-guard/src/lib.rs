@@ -17,6 +17,10 @@ use codex_ascodex_coordination::{
     ResearchCycleRecord, Role, StageBrief,
 };
 
+/// Re-exported role enum so consumers of the public contract gate do not need a direct
+/// dependency on the coordination crate.
+pub use codex_ascodex_coordination::Role as CoordinationRole;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Gate {
@@ -4568,6 +4572,53 @@ fn identity_pool_entry_from_row(
     })
 }
 
+/// Shared typed contract gate used by Core spawn/resume and app-server resume preflight.
+///
+/// Requires absolute file paths, a canonical fingerprint match, an active round window and a
+/// challenge binding. `role_requires_known` additionally demands `ContractStatus::Known`,
+/// which Core uses for solver dispatch and app-server uses for solver-profile resume.
+pub fn validate_contract_files(
+    contract_file: &Path,
+    fingerprint_input_file: &Path,
+    expected_challenge_id: &str,
+    role_requires_known: Option<Role>,
+    now_ms: i64,
+) -> Result<(), String> {
+    for (name, path) in [
+        ("ASCODEX_CONTRACT_FILE", contract_file),
+        ("ASCODEX_CONTRACT_INPUT_FILE", fingerprint_input_file),
+    ] {
+        if path.as_os_str().is_empty() || !path.is_absolute() {
+            return Err(format!("{name} must be an absolute path"));
+        }
+    }
+    let contract_bytes = std::fs::read(contract_file)
+        .map_err(|error| format!("cannot read ChallengeContract: {error}"))?;
+    let fingerprint_input = std::fs::read(fingerprint_input_file)
+        .map_err(|error| format!("cannot read canonical fingerprint input: {error}"))?;
+    let contract: codex_ascodex_coordination::ChallengeContract =
+        serde_json::from_slice(&contract_bytes)
+            .map_err(|error| format!("invalid ChallengeContract JSON: {error}"))?;
+    if contract.challenge_id != expected_challenge_id {
+        return Err(format!(
+            "contract challenge `{}` does not match expected `{expected_challenge_id}`",
+            contract.challenge_id
+        ));
+    }
+    contract
+        .verify_fingerprint_input(&fingerprint_input)
+        .map_err(|error| error.to_string())?;
+    contract
+        .validate(expected_challenge_id, now_ms)
+        .map_err(|error| error.to_string())?;
+    if role_requires_known == Some(Role::Solver)
+        && contract.status != codex_ascodex_coordination::ContractStatus::Known
+    {
+        return Err("solver dispatch requires a Known contract".to_string());
+    }
+    Ok(())
+}
+
 fn is_within_workspace(path: &Path, root: &Path) -> bool {
     let Ok(path) = path.canonicalize() else {
         return false;
@@ -4715,6 +4766,7 @@ mod tests {
         RecoveryCanaryEvent, RecoveryCanaryEvidence, RecoveryCanaryTurn,
     };
     use std::collections::BTreeSet;
+    use std::path::Path;
     use tempfile::tempdir;
 
     fn solver_actor_context(lease_id: &str) -> ActorContext {
@@ -7335,6 +7387,105 @@ model:
                 .await,
             Err(LedgerError::Degraded(_))
         ));
+    }
+
+    #[test]
+    fn contract_files_reject_relative_paths() {
+        let dir = tempdir().expect("tempdir");
+        let contract = dir.path().join("contract.json");
+        let fingerprint = dir.path().join("input.json");
+        std::fs::write(&contract, b"{}").expect("contract");
+        std::fs::write(&fingerprint, b"{}").expect("input");
+        // Relative paths must fail closed even though the files are readable.
+        let error = validate_contract_files(
+            Path::new("contract.json"),
+            Path::new("input.json"),
+            "challenge-a",
+            None,
+            300,
+        )
+        .expect_err("relative contract path must fail closed");
+        assert!(error.contains("absolute path"));
+        // Absolute paths proceed to parsing, which fails on invalid JSON rather than path checks.
+        let error = validate_contract_files(&contract, &fingerprint, "challenge-a", None, 300)
+            .expect_err("invalid contract JSON must fail closed");
+        assert!(error.contains("invalid ChallengeContract"));
+    }
+
+    #[test]
+    fn contract_files_bind_challenge_and_fingerprint() {
+        let dir = tempdir().expect("tempdir");
+        let contract = dir.path().join("contract.json");
+        let fingerprint = dir.path().join("input.json");
+        let fingerprint_input =
+            br#"{"challenge_id":"challenge-a","contract_version":"v1","required_submission":"arm"}"#;
+        std::fs::write(&fingerprint, fingerprint_input).expect("input");
+        let digest = sha256_bytes(fingerprint_input);
+        let fingerprint_hex: String = digest.chars().take(16).collect();
+        let make_contract = |challenge_id: &str, status: &str, adapter: Option<&str>| {
+            let contract_json = serde_json::json!({
+                "schema_version": "ascodex-coordination/v1",
+                "challenge_id": challenge_id,
+                "contract_version": "v1",
+                "fingerprint": fingerprint_hex,
+                "required_submission": "arm",
+                "status": status,
+                "adapter_id": adapter,
+                "round_start_ms": 100,
+                "round_end_ms": 999,
+            });
+            std::fs::write(&contract, contract_json.to_string()).expect("contract");
+        };
+        make_contract("challenge-a", "known", Some("adapter-v1"));
+        validate_contract_files(&contract, &fingerprint, "challenge-a", None, 300)
+            .expect("known bound contract passes");
+        make_contract("challenge-b", "known", Some("adapter-v1"));
+        let error = validate_contract_files(&contract, &fingerprint, "challenge-a", None, 300)
+            .expect_err("contract challenge mismatch must fail closed");
+        assert!(error.contains("challenge"));
+        std::fs::write(&fingerprint, b"changed").expect("tamper input");
+        make_contract("challenge-a", "known", Some("adapter-v1"));
+        let error = validate_contract_files(&contract, &fingerprint, "challenge-a", None, 300)
+            .expect_err("fingerprint mismatch must fail closed");
+        assert!(error.contains("fingerprint"));
+    }
+
+    #[test]
+    fn contract_files_known_gate_only_for_solver_role() {
+        let dir = tempdir().expect("tempdir");
+        let contract = dir.path().join("contract.json");
+        let fingerprint = dir.path().join("input.json");
+        let fingerprint_input =
+            br#"{"challenge_id":"challenge-a","contract_version":"v1","required_submission":"arm"}"#;
+        std::fs::write(&fingerprint, fingerprint_input).expect("input");
+        let digest = sha256_bytes(fingerprint_input);
+        let fingerprint_hex: String = digest.chars().take(16).collect();
+        let make_contract = |status: &str, adapter: Option<&str>| {
+            let contract_json = serde_json::json!({
+                "schema_version": "ascodex-coordination/v1",
+                "challenge_id": "challenge-a",
+                "contract_version": "v1",
+                "fingerprint": fingerprint_hex,
+                "required_submission": "arm",
+                "status": status,
+                "adapter_id": adapter,
+                "round_start_ms": 100,
+                "round_end_ms": 999,
+            });
+            std::fs::write(&contract, contract_json.to_string()).expect("contract");
+        };
+        make_contract("unknown", None);
+        validate_contract_files(&contract, &fingerprint, "challenge-a", None, 300)
+            .expect("unknown contract passes for non-solver role");
+        let error = validate_contract_files(
+            &contract,
+            &fingerprint,
+            "challenge-a",
+            Some(codex_ascodex_coordination::Role::Solver),
+            300,
+        )
+        .expect_err("solver role requires a Known contract");
+        assert!(error.contains("Known"));
     }
 
     #[tokio::test]
