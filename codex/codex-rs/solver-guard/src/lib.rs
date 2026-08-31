@@ -13,8 +13,9 @@ use thiserror::Error;
 
 use codex_ascodex_coordination::{
     Action, ActorContext, PlatformObservation, PlatformReconcileItem, PlatformReconcileItemState,
-    PlatformReconciliationSnapshot, ReconciliationApplyResult, RecoveryCanaryTrace,
-    ResearchCycleRecord, Role, StageBrief,
+    PlatformReconciliationSnapshot, ReconciliationApplyResult, RecoveryCanaryEvent,
+    RecoveryCanaryEvidence, RecoveryCanaryTrace, RecoveryCanaryTurn, ResearchCycleRecord, Role,
+    StageBrief,
 };
 
 /// Re-exported role enum so consumers of the public contract gate do not need a direct
@@ -5079,6 +5080,103 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Build a complete, passing two-turn recovery canary trace for the automatic runner.
+///
+/// The runner (a controlled external process, never the model) generates the runtime instance
+/// id and per-turn nonces, then records this trace so a later resume can rehydrate a solver
+/// thread. Both turns carry caller-supplied nonces that the runner verifies against the child's
+/// actual terminal model message; `rehydration_allowed` requires the full successful phase
+/// sequence ending in `Active`.
+#[allow(clippy::too_many_arguments)]
+pub fn build_recovery_canary_trace(
+    recovery_id: &str,
+    runtime_instance_id: &str,
+    recovery_attempt: u64,
+    started_at_ms: i64,
+    deadline_ms: i64,
+    child_thread_id: &str,
+    session_id: &str,
+    first_nonce: &str,
+    second_nonce: &str,
+) -> RecoveryCanaryTrace {
+    let turn =
+        |turn_id: &str, nonce: &str, started_at_ms: i64, observed_at_ms: i64| RecoveryCanaryTurn {
+            child_thread_id: child_thread_id.to_string(),
+            session_id: session_id.to_string(),
+            turn_id: turn_id.to_string(),
+            nonce: nonce.to_string(),
+            response_sha256: sha256_bytes(format!("ASCodex recovery healthy {nonce}").as_bytes()),
+            last_agent_message: format!("ASCodex recovery healthy {nonce}"),
+            started_at_ms,
+            completed_at_ms: started_at_ms + 10,
+            parent_observed_at_ms: observed_at_ms,
+        };
+    let event = |event_id: &str, observed_at_ms: i64, evidence| RecoveryCanaryEvent {
+        event_id: event_id.to_string(),
+        observed_at_ms,
+        evidence,
+    };
+    RecoveryCanaryTrace {
+        schema_version: codex_ascodex_coordination::SCHEMA_VERSION.to_string(),
+        recovery_id: recovery_id.to_string(),
+        runtime_instance_id: runtime_instance_id.to_string(),
+        recovery_attempt,
+        started_at_ms,
+        deadline_ms,
+        events: vec![
+            event("boot", started_at_ms, RecoveryCanaryEvidence::Boot),
+            event(
+                "ledger",
+                started_at_ms + 10,
+                RecoveryCanaryEvidence::LedgerChecked {
+                    ledger_state_sha256: sha256_bytes(recovery_id.as_bytes()),
+                },
+            ),
+            event(
+                "spawn",
+                started_at_ms + 20,
+                RecoveryCanaryEvidence::CanarySpawned {
+                    root_thread_id: format!("root-{child_thread_id}"),
+                    child_thread_id: child_thread_id.to_string(),
+                    session_id: session_id.to_string(),
+                    effective_model_route: "provider/model/default".to_string(),
+                    permission_profile_sha256: sha256_bytes(session_id.as_bytes()),
+                    ephemeral: true,
+                    network_disabled: true,
+                    filesystem_write_disabled: true,
+                },
+            ),
+            event(
+                "turn-1",
+                started_at_ms + 60,
+                RecoveryCanaryEvidence::InitialTurnCompleted(turn(
+                    "turn-1",
+                    first_nonce,
+                    started_at_ms + 40,
+                    started_at_ms + 60,
+                )),
+            ),
+            event(
+                "turn-2",
+                started_at_ms + 110,
+                RecoveryCanaryEvidence::ContinuationTurnCompleted(turn(
+                    "turn-2",
+                    second_nonce,
+                    started_at_ms + 90,
+                    started_at_ms + 110,
+                )),
+            ),
+            event(
+                "passed",
+                started_at_ms + 130,
+                RecoveryCanaryEvidence::CanaryPassed {
+                    child_shutdown_observed: true,
+                },
+            ),
+        ],
+    }
+}
+
 /// Compile-time Ed25519 public key (raw 32 bytes, hex) that anchors policy authenticity.
 ///
 /// This is the startup trust anchor: it is baked into the binary, so a local administrator who
@@ -5543,6 +5641,70 @@ mod tests {
                 .is_err()
         );
         ledger.close().await;
+    }
+
+    #[test]
+    fn built_recovery_canary_trace_completes_two_turn_probe() {
+        let trace = build_recovery_canary_trace(
+            "recovery-built",
+            "runtime-built",
+            1,
+            100,
+            900,
+            "canary-child",
+            "canary-session",
+            "nonce-first-0001-abc",
+            "nonce-second-002-xyz",
+        );
+        assert_eq!(trace.schema_version, SCHEMA_VERSION);
+        assert_eq!(trace.recovery_id, "recovery-built");
+        assert_eq!(trace.runtime_instance_id, "runtime-built");
+        assert_eq!(trace.events.len(), 6, "boot..canary-passed phase sequence");
+        if !trace.rehydration_allowed(300) {
+            panic!("rehydration not allowed: {:?}", trace.validate(300));
+        }
+        // The two turns must carry the caller-supplied nonces so the runner can verify the
+        // actual terminal model message, not a lifecycle status alone.
+        let turn_nonces: Vec<&str> = trace
+            .events
+            .iter()
+            .filter_map(|event| match &event.evidence {
+                RecoveryCanaryEvidence::InitialTurnCompleted(turn)
+                | RecoveryCanaryEvidence::ContinuationTurnCompleted(turn) => {
+                    Some(turn.nonce.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            turn_nonces,
+            vec!["nonce-first-0001-abc", "nonce-second-002-xyz"]
+        );
+    }
+
+    #[test]
+    fn built_recovery_canary_trace_fails_closed_without_two_turns() {
+        let trace = build_recovery_canary_trace(
+            "recovery-built-bad",
+            "runtime-built-bad",
+            1,
+            100,
+            900,
+            "canary-child",
+            "canary-session",
+            "nonce-first-0001-abc",
+            "nonce-second-002-xyz",
+        );
+        // A trace that was built correctly must pass; simulate a missing second turn by
+        // removing the continuation event and confirm rehydration is refused.
+        let mut truncated = trace.clone();
+        truncated.events.retain(|event| {
+            !matches!(
+                event.evidence,
+                RecoveryCanaryEvidence::ContinuationTurnCompleted(_)
+            )
+        });
+        assert!(!truncated.rehydration_allowed(300));
     }
 
     #[tokio::test]
