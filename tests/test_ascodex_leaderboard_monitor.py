@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from scripts.ascodex_leaderboard_monitor import (
-    SCHEMA_VERSION,
+    CONFIRMATION_SCHEMA_VERSION,
     build_confirmation_state,
     confirmation_filename,
     run_leaderboard_cycles,
@@ -47,7 +47,8 @@ def test_monitor_writes_confirmation_evidence_for_owned_attempt(tmp_path: Path) 
     )
     assert wake.exists(), "confirmation evidence file must be written"
     parsed = json.loads(wake.read_text(encoding="utf-8"))
-    assert parsed["schema_version"] == SCHEMA_VERSION
+    assert parsed["schema_version"] == CONFIRMATION_SCHEMA_VERSION
+    assert parsed["confirmation_id"] == "conf-attempt-1"
     assert parsed["attempt_id"] == "attempt-1"
     assert parsed["state"] == "confirmed"
     # Deterministic name derived from attempt + response, not random.

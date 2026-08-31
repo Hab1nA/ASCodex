@@ -27,6 +27,7 @@ from scripts.ascodex_leaderboard_check import (
 from scripts.ascodex_monitor import write_atomic
 
 SCHEMA_VERSION = "ascodex-leaderboard-monitor/v1"
+CONFIRMATION_SCHEMA_VERSION = "ascodex-leaderboard-confirmation/v1"
 
 
 def confirmation_filename(attempt_id: str, scope: str | None) -> str:
@@ -54,7 +55,14 @@ def write_confirmation_evidence(
         expected_effective_score=expected_effective_score,
         scope=scope,
     )
-    confirmation["schema_version"] = SCHEMA_VERSION
+    confirmation["schema_version"] = CONFIRMATION_SCHEMA_VERSION
+    confirmation["confirmation_id"] = f"conf-{attempt_id}"
+    entry = confirmation.get("entry")
+    confirmation["owner"] = (
+        (entry.get("credited_owner") or entry.get("owner") or "") if isinstance(entry, dict) else ""
+    )
+    if not confirmation["owner"]:
+        raise ValueError("leaderboard confirmation requires an owned entry with a credited owner")
     confirmation["response_sha256"] = hashlib.sha256(
         _json_bytes(response)
     ).hexdigest()

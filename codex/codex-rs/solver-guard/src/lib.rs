@@ -1698,6 +1698,8 @@ pub struct LeaderboardConfirmation {
     pub state: String,
     pub reason: Option<String>,
     pub response_sha256: String,
+    /// Original leaderboard entry retained for audit (optional; not required to confirm).
+    pub entry: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -9584,6 +9586,7 @@ model:
             state: "confirmed".to_string(),
             reason: None,
             response_sha256: "a".repeat(64),
+            entry: None,
         }
     }
 
