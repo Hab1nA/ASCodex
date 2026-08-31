@@ -7,6 +7,14 @@ channel:
   trusted_cli_sha256: 0000000000000000000000000000000000000000000000000000000000000000
   # A pre-submit channel probe is a live fact. Omitting this field uses a 15-minute maximum.
   channel_probe_max_age_ms: 900000
+  # Typed network egress allowlist for solver-profile tools. deny_all defaults to true, so an
+  # unconfigured egress policy blocks all outbound network tools. Keep the allowlist to the
+  # read-only platform origin and any genuinely required research hosts.
+  egress:
+    deny_all: false
+    allowed_domains:
+      - play.bohrium.com
+    denied_domains: []
 identity:
   name: example-identity
   challenge_id: example-challenge

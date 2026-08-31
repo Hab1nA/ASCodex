@@ -135,6 +135,8 @@ Codex AgentControl 只负责 thread 生命周期、lineage、消息、等待与�
 
 solver profile 的 child dispatch 进一步收紧为 `depth=1`：只有 Chief/root 直接派发 worker，普通 worker 不得再派生第二层 solver child。Core 在资源预留前还会以 live parent/session、可信时钟和 Guard ledger 校验 Chief `SpawnChild` lease 与 active `cycle_id + cycle_event_version`；深度门、租约门和 cycle/brief 门缺一不可。
 
+2026-08-31 补充：solver profile 的网络 egress 已接入 typed `EgressPolicy`（`ChannelPolicy.egress`，默认 `deny_all=true` 即空策略全部拒绝）。`validate_egress` 做精确主机名/子域名 allowlist 匹配、`denied_domains` 显式覆盖、`extract_network_host` 只接受 http/https；Core Tool Registry 在 `solver_guard_blocks_invocation`（含 hook 改写后复查）中解析 digest 门控的 policy 文件并对 `webFetch`/`webSearch` 等网络工具执行 egress preflight，策略缺失/未签名/路径穿越/非 http URL 一律 fail-closed。这仍是进程内策略层，不是 OS 级网络沙箱/防火墙隔离。
+
 每轮必须落盘 `ResearchCycleRecord`，至少包含 verifier/spec hash、实验假设、单字段或显式耦合轴、baseline hash、quota 成本、角色 brief hash、worker report、平台观测 hash、事实/推断分栏以及下一步 directive。缺 verifier、baseline、brief 或相应阶段证据时只能 `blocked` 或 `inconclusive`，不得自然语言跳转到提交或封板。
 
 跨轮推进还必须通过 `ResearchCycleRecord::validate_successor`：后继记录只能引用同一
@@ -186,7 +188,7 @@ Trace admission 的当前硬条件是：JSON/JSONL 仅允许 1--10,000 个对象
 
 已实现并测试：管理员专用 `ascodex-lease-admin` 与 `ascodex-stage-admin` 二进制、原子 lease provision/revoke、Chief 绑定的 cycle/brief 签发和版本化审计事件、StageBrief 路由契约和离线 ResearchCycleRecord。`codex-ascodex-runtime` 从既有 SQLite issuance 按 `cycle_id + child role` 唯一读取 brief，重新验证 campaign/challenge/role、有效期、canonical workspace boundary、capability map 与每个 Codex 活跃 Skill SHA-256，并把不超过声明预算的引用卡注入独立 developer context；policy root（技能/能力图校验）与 challenge workspace root（角色 ACL）已在 StageBrief 中分离，避免 Solver 因技能根而获得仓库根写权限；fork 会移除继承 brief，solver profile 拒绝 direct delegate session。`supersede_research_cycle_audited` 会在撤销前驱前读取其持久 JSON/hash，并通过 `ResearchCycleRecord::validate_successor` 拒绝版本跳跃、题目漂移和终态后继。旧 JSON bundle 仅保留导入/离线兼容格式，已不作为 spawn 权威。管理员命令不是模型 tool，只接受绝对 SQLite/JSON 路径并且不会输出 operator、lease context 或凭据。
 
-尚未实现：真实 `solver_guard_submit` executor、不可由本机管理员覆盖的策略与启动配置、常驻后台 supervisor、artifact 与 execution block 的全量交叉引用、OS 级网络 egress、真实平台 monitor/榜单复查、chief-first 常驻 monitor/AutoPush，以及 Core/app-server 全部状态转移对 `ResearchCycleRecord` 的强制接入。cycle revoke/supersede 已具备控制面原语，但尚未扩展为所有 app-server 状态事件的统一生命周期服务。execution 校验仍是本地文件/时间窗证明，不是平台侧真实性证明；redline 仍是本地文本证据扫描；恢复金丝雀已实现持久化、runtime 绑定、两回合证据与 resume admission 门，并有篡改/冲突/过期负向测试，但真实 Core disposable-child runner 尚未接入，不能宣称完整 boot→active 自动闭环；故当前所有真实 Bohrium 写操作保持关闭。
+尚未实现：真实 `solver_guard_submit` executor、不可由本机管理员覆盖的策略与启动配置、常驻后台 supervisor、artifact 与 execution block 的全量交叉引用、OS 级网络 egress（本机沙箱/防火墙层）、真实平台 monitor/榜单复查、chief-first 常驻 monitor/AutoPush，以及 Core/app-server 全部状态转移对 `ResearchCycleRecord` 的强制接入。cycle revoke/supersede 已具备控制面原语，但尚未扩展为所有 app-server 状态事件的统一生命周期服务。execution 校验仍是本地文件/时间窗证明，不是平台侧真实性证明；redline 仍是本地文本证据扫描；恢复金丝雀已实现持久化、runtime 绑定、两回合证据与 resume admission 门，并有篡改/冲突/过期负向测试，但真实 Core disposable-child runner 尚未接入，不能宣称完整 boot→active 自动闭环；故当前所有真实 Bohrium 写操作保持关闭。
 
 策略完整性现状：`solver_guard_submit` 会复算 Guard policy 文件 SHA-256 并与 `ASCODEX_POLICY_SHA256` 比较，启动脚本也要求管理员提供 approved digest。这只防止 policy 文件在启动后被静默替换，不等于不可篡改的 OS/签名信任根；issuance selector 仍受进程环境影响。
 

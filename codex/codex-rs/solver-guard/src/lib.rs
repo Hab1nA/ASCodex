@@ -271,10 +271,134 @@ pub struct ChannelPolicy {
     /// A channel probe is a live fact, not a permanent campaign setting.
     #[serde(default = "default_channel_probe_max_age_ms")]
     pub channel_probe_max_age_ms: i64,
+    /// Typed network egress allowlist for solver-profile tools. Defaults to deny-all so an
+    /// unconfigured policy never silently permits outbound traffic.
+    #[serde(default)]
+    pub egress: EgressPolicy,
 }
 
 fn default_channel_probe_max_age_ms() -> i64 {
     15 * 60 * 1000
+}
+
+/// Typed egress policy for the solver profile. Network access from solver tools is allowlisted
+/// by domain; an empty allowlist (or `deny_all`) fails closed so an unconfigured policy never
+/// silently permits outbound traffic. `denied_domains` is an explicit subdomain deny that
+/// overrides the allowlist.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EgressPolicy {
+    #[serde(default)]
+    pub deny_all: bool,
+    #[serde(default)]
+    pub allowed_domains: Vec<String>,
+    #[serde(default)]
+    pub denied_domains: Vec<String>,
+}
+
+impl Default for EgressPolicy {
+    fn default() -> Self {
+        Self {
+            deny_all: true,
+            allowed_domains: Vec::new(),
+            denied_domains: Vec::new(),
+        }
+    }
+}
+
+fn is_valid_hostname(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+        })
+}
+
+/// Extract the hostname from an absolute http/https URL. Other schemes and malformed inputs
+/// fail closed (Err) so callers treat them as egress violations.
+pub fn extract_network_host(url: &str) -> Result<&str, &'static str> {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .ok_or("egress only admits http/https URLs")?;
+    let host = rest
+        .split(['/', '?', '#'])
+        .next()
+        .ok_or("egress URL has no host")?;
+    let host = host.split(':').next().ok_or("egress URL has no host")?;
+    if !is_valid_hostname(host) {
+        return Err("egress URL host is not a valid hostname");
+    }
+    Ok(host)
+}
+
+/// Check a hostname against the typed egress policy. Exact host or subdomain of an allowlisted
+/// domain is admitted; an explicit denied domain overrides; anything else fails closed.
+pub fn validate_egress(host: &str, policy: &EgressPolicy) -> Result<(), &'static str> {
+    if !is_valid_hostname(host) {
+        return Err("egress host is not a valid hostname");
+    }
+    if policy.deny_all {
+        return Err("egress deny_all is enabled");
+    }
+    let host = host.to_ascii_lowercase();
+    let matched_allowed = policy.allowed_domains.iter().any(|allowed| {
+        host == allowed.to_ascii_lowercase() || host.ends_with(&format!(".{allowed}"))
+    });
+    if !matched_allowed {
+        return Err("egress host is not in the allowed domains");
+    }
+    if policy
+        .denied_domains
+        .iter()
+        .any(|denied| host == denied.to_ascii_lowercase() || host.ends_with(&format!(".{denied}")))
+    {
+        return Err("egress host is denied by the policy");
+    }
+    Ok(())
+}
+
+const NETWORK_TOOL_NAMES: &[&str] = &[
+    "webfetch",
+    "websearch",
+    "webfetchtext",
+    "web_fetch",
+    "web_search",
+];
+
+/// Egress preflight for network-capable tools. Non-network tools and non-solver mode are
+/// admitted unchanged; network tools must carry an http/https URL whose host passes the typed
+/// egress policy, otherwise they are blocked fail-closed.
+pub fn network_tool_egress_preflight(
+    tool_name: &str,
+    input: &serde_json::Value,
+    policy: &EgressPolicy,
+    solver_mode: bool,
+) -> RpcDecision {
+    if !solver_mode {
+        return RpcDecision::Allow;
+    }
+    let lower_name = tool_name.to_ascii_lowercase();
+    if !NETWORK_TOOL_NAMES
+        .iter()
+        .any(|name| lower_name == *name || lower_name.ends_with(name))
+    {
+        return RpcDecision::Allow;
+    }
+    let url = match input.get("url").and_then(JsonValue::as_str) {
+        Some(url) if !url.trim().is_empty() => url,
+        _ => return RpcDecision::Block,
+    };
+    match extract_network_host(url).and_then(|host| validate_egress(host, policy)) {
+        Ok(()) => RpcDecision::Allow,
+        Err(_) => RpcDecision::Block,
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -6298,6 +6422,7 @@ mod tests {
                 trusted_cli_root: Some(cli_root),
                 trusted_cli_sha256: sha256_file(&trusted_cli).expect("hash"),
                 channel_probe_max_age_ms: 900_000,
+                egress: EgressPolicy::default(),
             },
             identity: IdentityPolicy {
                 name: "id".to_string(),
@@ -6727,6 +6852,110 @@ model:
         assert_eq!(
             rpc_preflight("mcpServer/tool/call", true),
             RpcDecision::Block
+        );
+    }
+
+    #[test]
+    fn egress_policy_deny_all_and_empty_allowlist_fail_closed() {
+        let deny_all = EgressPolicy {
+            deny_all: true,
+            allowed_domains: vec!["play.bohrium.com".to_string()],
+            denied_domains: Vec::new(),
+        };
+        assert!(
+            validate_egress("play.bohrium.com", &deny_all).is_err(),
+            "deny_all blocks even an allowlisted host"
+        );
+        let empty = EgressPolicy {
+            deny_all: false,
+            allowed_domains: Vec::new(),
+            denied_domains: Vec::new(),
+        };
+        assert!(
+            validate_egress("example.com", &empty).is_err(),
+            "empty allowlist fails closed"
+        );
+        let malformed = EgressPolicy {
+            deny_all: false,
+            allowed_domains: vec!["play.bohrium.com".to_string()],
+            denied_domains: Vec::new(),
+        };
+        assert!(validate_egress("", &malformed).is_err());
+        assert!(validate_egress("not a host", &malformed).is_err());
+    }
+
+    #[test]
+    fn egress_policy_allows_exact_and_subdomain_and_denied_overrides() {
+        let policy = EgressPolicy {
+            deny_all: false,
+            allowed_domains: vec!["play.bohrium.com".to_string()],
+            denied_domains: vec!["api.play.bohrium.com".to_string()],
+        };
+        validate_egress("play.bohrium.com", &policy).expect("exact allow");
+        validate_egress("api.play.bohrium.com", &policy)
+            .expect_err("denied_domains overrides the allowlist");
+        validate_egress("deepseek.play.bohrium.com", &policy).expect("subdomain allow");
+        validate_egress("play.bohrium.com.evil.net", &policy)
+            .expect_err("suffix spoofing must not match");
+        validate_egress("example.com", &policy).expect_err("unlisted host fails closed");
+    }
+
+    #[test]
+    fn extract_network_host_parses_http_urls() {
+        assert_eq!(
+            extract_network_host("https://play.bohrium.com/api/challenges").expect("host"),
+            "play.bohrium.com"
+        );
+        assert_eq!(
+            extract_network_host("http://api.play.bohrium.com:8080/path").expect("host"),
+            "api.play.bohrium.com"
+        );
+        assert!(
+            extract_network_host("ftp://example.com").is_err(),
+            "non-http scheme rejected"
+        );
+        assert!(extract_network_host("not-a-url").is_err());
+    }
+
+    #[test]
+    fn network_tool_egress_preflight_allows_allowlisted_domains_only() {
+        let policy = EgressPolicy {
+            deny_all: false,
+            allowed_domains: vec!["play.bohrium.com".to_string()],
+            denied_domains: Vec::new(),
+        };
+        let input = serde_json::json!({"url": "https://play.bohrium.com/api/challenges"});
+        assert_eq!(
+            network_tool_egress_preflight("webFetch", &input, &policy, true),
+            RpcDecision::Allow
+        );
+        let blocked = serde_json::json!({"url": "https://evil.example.com/x"});
+        assert_eq!(
+            network_tool_egress_preflight("webFetch", &blocked, &policy, true),
+            RpcDecision::Block
+        );
+        // Missing URL is fail-closed for network tools.
+        assert_eq!(
+            network_tool_egress_preflight("webFetch", &serde_json::json!({}), &policy, true),
+            RpcDecision::Block
+        );
+    }
+
+    #[test]
+    fn network_tool_egress_preflight_ignores_non_network_tools_and_non_solver_mode() {
+        let policy = EgressPolicy {
+            deny_all: false,
+            allowed_domains: vec!["play.bohrium.com".to_string()],
+            denied_domains: Vec::new(),
+        };
+        let input = serde_json::json!({"url": "https://evil.example.com/x"});
+        assert_eq!(
+            network_tool_egress_preflight("read_file", &input, &policy, true),
+            RpcDecision::Allow
+        );
+        assert_eq!(
+            network_tool_egress_preflight("webFetch", &input, &policy, false),
+            RpcDecision::Allow
         );
     }
 

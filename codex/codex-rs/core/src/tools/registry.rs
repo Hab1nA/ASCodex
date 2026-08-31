@@ -42,6 +42,7 @@ use futures::future::BoxFuture;
 use indexmap::IndexMap;
 use indexmap::map::Entry;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 pub(crate) type ToolTelemetryTags = Vec<(&'static str, String)>;
 
@@ -811,15 +812,61 @@ fn solver_guard_blocks_invocation(invocation: &ToolInvocation) -> bool {
         }
         _ => Value::Null,
     };
-    matches!(
-        codex_solver_guard::tool_preflight_with_input(
-            flat_tool_name(&invocation.tool_name).as_ref(),
-            &guard_input,
-            std::env::var("ASCODEX_SOLVER_MODE")
-                .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
-                .unwrap_or(false),
-        ),
+    let solver_mode = std::env::var("ASCODEX_SOLVER_MODE")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false);
+    let tool_name_cow = flat_tool_name(&invocation.tool_name);
+    let tool_name = tool_name_cow.as_ref();
+    if matches!(
+        codex_solver_guard::tool_preflight_with_input(tool_name, &guard_input, solver_mode),
         codex_solver_guard::RpcDecision::Block
+    ) {
+        return true;
+    }
+    if solver_mode
+        && matches!(
+            solver_guard_egress_blocks(tool_name, &guard_input),
+            codex_solver_guard::RpcDecision::Block
+        )
+    {
+        return true;
+    }
+    false
+}
+
+/// Egress enforcement for network-capable tools in solver mode: parse the typed policy file
+/// (digest-gated by ASCODEX_POLICY_SHA256) and run the network-tool egress preflight. A policy
+/// that is absent, unreadable, relative, or digest-mismatched fails closed. The path is
+/// canonicalized before use so `..` traversal or a dangling mount cannot read outside the
+/// intended policy file.
+fn solver_guard_egress_blocks(tool_name: &str, input: &Value) -> codex_solver_guard::RpcDecision {
+    let policy_path = match std::env::var("ASCODEX_SOLVER_POLICY_FILE") {
+        Ok(path) if !path.trim().is_empty() => path,
+        _ => return codex_solver_guard::RpcDecision::Block,
+    };
+    let Ok(canonical_path) = std::path::Path::new(&policy_path).canonicalize() else {
+        return codex_solver_guard::RpcDecision::Block;
+    };
+    let Ok(policy_bytes) = std::fs::read(&canonical_path) else {
+        return codex_solver_guard::RpcDecision::Block;
+    };
+    let actual_digest = format!("{:x}", Sha256::digest(&policy_bytes));
+    let expected_digest = std::env::var("ASCODEX_POLICY_SHA256").unwrap_or_default();
+    if expected_digest.len() != 64
+        || !expected_digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || !actual_digest.eq_ignore_ascii_case(&expected_digest)
+    {
+        return codex_solver_guard::RpcDecision::Block;
+    }
+    let Ok(policy) = codex_solver_guard::Policy::from_yaml(&String::from_utf8_lossy(&policy_bytes))
+    else {
+        return codex_solver_guard::RpcDecision::Block;
+    };
+    codex_solver_guard::network_tool_egress_preflight(
+        tool_name,
+        input,
+        &policy.channel.egress,
+        true,
     )
 }
 
