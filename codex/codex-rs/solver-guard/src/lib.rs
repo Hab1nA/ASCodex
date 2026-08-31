@@ -4400,9 +4400,10 @@ impl Ledger {
                 LedgerError::Degraded("replayed chief wake is missing its stored request".into())
             })?;
             if row.try_get::<String, _>("request_json")? != request_json
-                || row.try_get::<String, _>("state")?
-                    != chief_wake_state_name(&ChiefWakeState::Waiting)
-                || row.try_get::<Option<i64>, _>("acked_at_ms")?.is_some()
+                || !matches!(
+                    row.try_get::<String, _>("state")?.as_str(),
+                    "waiting" | "acked"
+                )
             {
                 return Err(LedgerError::Degraded(
                     "replayed chief wake does not match the stored request".into(),
@@ -4548,6 +4549,34 @@ impl Ledger {
             })?);
         }
         Ok(wakes)
+    }
+
+    /// Consume one Chief wake request file: parse it, persist it if not yet recorded, then ack
+    /// it. Re-consuming the same file is a no-op returning the same version count. Malformed
+    /// JSON and wakes that do not bind an applied reconciliation fact fail closed before any
+    /// write. Each phase is itself atomic with its audit event.
+    pub async fn consume_chief_wake_file(
+        &self,
+        request_json: &str,
+        campaign_id: &str,
+        now_ms: i64,
+        events: &[CoordinationEventRecord<'_>],
+    ) -> Result<u64, LedgerError> {
+        if events.len() != 2 {
+            return Err(LedgerError::Degraded(
+                "chief wake consume requires exactly two events (record and ack)".into(),
+            ));
+        }
+        let wake: ChiefWakeRequest = serde_json::from_str(request_json).map_err(|error| {
+            LedgerError::Degraded(format!("chief wake file is invalid JSON: {error}"))
+        })?;
+        // Record phase (idempotent under replay of the same event).
+        self.record_chief_wake_audited(&wake, campaign_id, now_ms, &events[0])
+            .await?;
+        // Ack phase (idempotent under replay of the same event); its version is the final
+        // authoritative state version of the wake aggregate.
+        self.ack_chief_wake_audited(&wake.wake_id, now_ms, &events[1])
+            .await
     }
 
     pub async fn release(&self, id: &str) -> Result<(), LedgerError> {
@@ -5081,7 +5110,6 @@ pub fn verify_policy_signature(
     let public_key = ed25519_dalek::VerifyingKey::from_bytes(&public_key_bytes)
         .map_err(|_| "trust anchor public key is invalid".to_string())?;
     let signature = ed25519_dalek::Signature::from_bytes(&signature_bytes);
-    use ed25519_dalek::Verifier as _;
     public_key
         .verify_strict(data, &signature)
         .map_err(|_| "policy signature verification failed".to_string())
@@ -7006,10 +7034,10 @@ model:
 
     #[test]
     fn policy_signature_verifies_and_rejects_tampering() {
-        use ed25519_dalek::Signer;
-        use rand_core::CryptoRngCore;
-        let mut rng = rand_core::OsRng;
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let mut seed = [0u8; 32];
+        seed[0] = 1;
+        seed[1] = 2;
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
         let public_key = signing_key.verifying_key();
         let public_hex = public_key
             .to_bytes()
@@ -7017,7 +7045,7 @@ model:
             .map(|b| format!("{b:02x}"))
             .collect::<String>();
         let policy_bytes = b"channel:\n  harbor_only: true\n";
-        let signature = signing_key.sign(policy_bytes);
+        let signature = ed25519_dalek::Signer::sign(&signing_key, policy_bytes);
         let signature_hex = signature
             .to_bytes()
             .iter()
@@ -7035,9 +7063,10 @@ model:
             .is_err()
         );
         // Wrong signature must fail.
-        let other = ed25519_dalek::SigningKey::generate(&mut rng);
-        let wrong_hex = other
-            .sign(policy_bytes)
+        let mut other_seed = [0u8; 32];
+        other_seed[0] = 9;
+        let other = ed25519_dalek::SigningKey::from_bytes(&other_seed);
+        let wrong_hex = ed25519_dalek::Signer::sign(&other, policy_bytes)
             .to_bytes()
             .iter()
             .map(|b| format!("{b:02x}"))
@@ -7047,10 +7076,9 @@ model:
 
     #[test]
     fn policy_signature_rejects_malformed_hex_and_empty_inputs() {
-        use ed25519_dalek::Signer;
-        use rand_core::CryptoRngCore;
-        let mut rng = rand_core::OsRng;
-        let signing_key = ed25519_dalek::SigningKey::generate(&mut rng);
+        let mut seed = [0u8; 32];
+        seed[0] = 3;
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
         let public_hex = signing_key
             .verifying_key()
             .to_bytes()
@@ -7076,6 +7104,145 @@ model:
         );
         let bytes: [u8; 32] = bytes.try_into().expect("anchor is 32 bytes");
         ed25519_dalek::VerifyingKey::from_bytes(&bytes).expect("anchor parses as Ed25519 key");
+    }
+
+    fn consume_wake_events<'a>(
+        wake_id: &'a str,
+        record_event_id: &'a str,
+        record_key: &'a str,
+        ack_event_id: &'a str,
+        ack_key: &'a str,
+        now_ms: i64,
+    ) -> Vec<CoordinationEventRecord<'a>> {
+        vec![
+            wake_event(
+                record_event_id,
+                record_key,
+                wake_id,
+                "chief_wake_requested",
+                0,
+                now_ms,
+            ),
+            wake_event(
+                ack_event_id,
+                ack_key,
+                wake_id,
+                "chief_wake_acked",
+                1,
+                now_ms,
+            ),
+        ]
+    }
+
+    #[tokio::test]
+    async fn chief_wake_file_consume_records_and_acks_atomically() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("wake-consume.sqlite");
+        let ledger = Ledger::connect_file(&path).await.expect("connect");
+        let monitor = monitor_actor_context("monitor-wake-consume");
+        ledger
+            .provision_actor_context(&monitor, 200)
+            .await
+            .expect("provision monitor");
+        let item = reconciliation_item(1, "attempt-a", 'd');
+        let payload = serde_json::to_string(&item).expect("item payload");
+        let event = CoordinationEventRecord {
+            event_id: "reconcile-event-a",
+            idempotency_key: "reconcile-key-a",
+            aggregate_type: "campaign",
+            aggregate_id: "campaign-a",
+            expected_version: 0,
+            event_type: "platform_reconciliation_recorded",
+            payload_json: &payload,
+            occurred_at_ms: 200,
+        };
+        let applied = ledger
+            .apply_platform_reconciliation_audited(&monitor, &item, 200, &event)
+            .await
+            .expect("apply reconciliation");
+        let event_version = applied.persisted.event_version.expect("event version");
+        let wake = chief_wake(
+            "wake-consume-1",
+            "campaign-a",
+            "challenge-a",
+            "challenge-a/attempts",
+            event_version as i64,
+            &item.response_sha256,
+        );
+        let wake_json = serde_json::to_string(&wake).expect("wake json");
+        let events = consume_wake_events(
+            "wake-consume-1",
+            "wake-consume-1-record",
+            "wake-consume-1-record-key",
+            "wake-consume-1-ack",
+            "wake-consume-1-ack-key",
+            300,
+        );
+        let consumed = ledger
+            .consume_chief_wake_file(&wake_json, "campaign-a", 300, &events)
+            .await
+            .expect("consume wake file");
+        assert_eq!(consumed, 2);
+        // Re-consuming the same file is idempotent.
+        let events_replay = consume_wake_events(
+            "wake-consume-1",
+            "wake-consume-1-record",
+            "wake-consume-1-record-key",
+            "wake-consume-1-ack",
+            "wake-consume-1-ack-key",
+            300,
+        );
+        let replay = ledger
+            .consume_chief_wake_file(&wake_json, "campaign-a", 300, &events_replay)
+            .await
+            .expect("replay consume");
+        assert_eq!(replay, 2);
+    }
+
+    #[tokio::test]
+    async fn chief_wake_file_consume_rejects_malformed_or_unbound_files() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("wake-consume-bad.sqlite");
+        let ledger = Ledger::connect_file(&path).await.expect("connect");
+        // Malformed JSON fails closed.
+        let events = consume_wake_events(
+            "wake-bad-1",
+            "wake-bad-1-record",
+            "wake-bad-1-record-key",
+            "wake-bad-1-ack",
+            "wake-bad-1-ack-key",
+            300,
+        );
+        assert!(
+            ledger
+                .consume_chief_wake_file("not json", "campaign-a", 300, &events)
+                .await
+                .is_err()
+        );
+        // Unbound wake (no applied reconciliation) fails closed.
+        let wake = chief_wake(
+            "wake-bad-2",
+            "campaign-a",
+            "challenge-a",
+            "challenge-a/attempts",
+            1,
+            &"d".repeat(64),
+        );
+        let wake_json = serde_json::to_string(&wake).expect("wake json");
+        let events = consume_wake_events(
+            "wake-bad-2",
+            "wake-bad-2-record",
+            "wake-bad-2-record-key",
+            "wake-bad-2-ack",
+            "wake-bad-2-ack-key",
+            300,
+        );
+        assert!(
+            ledger
+                .consume_chief_wake_file(&wake_json, "campaign-a", 300, &events)
+                .await
+                .is_err()
+        );
     }
 
     fn write_channel_probe_fixture(root: &Path) -> (PathBuf, PathBuf, PathBuf) {

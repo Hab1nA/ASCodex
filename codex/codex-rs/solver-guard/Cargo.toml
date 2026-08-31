@@ -28,6 +28,10 @@ path = "src/bin/pool_admin.rs"
 name = "ascodex-wake-admin"
 path = "src/bin/wake_admin.rs"
 
+[[bin]]
+name = "ascodex-wake-consumer"
+path = "src/bin/wake_consumer.rs"
+
 
 [lints]
 workspace = true
