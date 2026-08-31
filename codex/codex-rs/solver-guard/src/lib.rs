@@ -1679,6 +1679,43 @@ pub struct PersistedChiefWake {
     pub event_version: Option<u64>,
 }
 
+/// Typed leaderboard confirmation written by the resident monitor. It re-confirms that an owned
+/// attempt appears in the official leaderboard with matching owner/score/scope. `owner` and
+/// `attempt_id` are mandatory: a confirmation without an explicit owner can never be recorded,
+/// and cross-owner matches fail closed (no anonymous reading of another user's attempt).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LeaderboardConfirmation {
+    pub schema_version: String,
+    pub confirmation_id: String,
+    pub attempt_id: String,
+    pub owner: String,
+    pub found: bool,
+    pub owner_match: bool,
+    pub score_match: bool,
+    pub scope_match: bool,
+    pub scope: Option<String>,
+    pub state: String,
+    pub reason: Option<String>,
+    pub response_sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfirmationState {
+    Confirmed,
+    UnknownNeedsReconcile,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PersistedLeaderboardConfirmation {
+    pub confirmation_id: String,
+    pub request: LeaderboardConfirmation,
+    pub state: ConfirmationState,
+    pub recorded_at_ms: i64,
+    pub event_version: Option<u64>,
+}
+
 #[derive(Debug, Clone)]
 struct PersistedReconciliationSnapshot {
     campaign_id: String,
@@ -1810,6 +1847,16 @@ impl Ledger {
         .await?;
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS chief_wake_requests (wake_id TEXT PRIMARY KEY, request_json TEXT NOT NULL, request_sha256 TEXT NOT NULL, state TEXT NOT NULL, recorded_at_ms INTEGER NOT NULL, acked_at_ms INTEGER, event_version INTEGER NOT NULL)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS leaderboard_confirmations (confirmation_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, owner TEXT NOT NULL, confirmation_json TEXT NOT NULL, confirmation_sha256 TEXT NOT NULL, state TEXT NOT NULL, recorded_at_ms INTEGER NOT NULL, event_version INTEGER NOT NULL)",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS leaderboard_confirmations_owner_idx ON leaderboard_confirmations (owner, attempt_id)",
         )
         .execute(&pool)
         .await?;
@@ -4442,6 +4489,155 @@ impl Ledger {
         .await?;
         transaction.commit().await?;
         Ok(appended.version)
+    }
+
+    /// Record a typed leaderboard confirmation produced by the resident monitor. Binds the
+    /// confirmation to a Monitor context (a Chief/other role is rejected), requires a non-empty
+    /// owner and attempt id, validates the typed schema and confirmation state, binds the audit
+    /// event, and persists the confirmation JSON with its SHA-256. Replaying the same event is a
+    /// no-op that returns the original version, tolerating an already-recorded confirmation.
+    pub async fn record_leaderboard_confirmation_audited(
+        &self,
+        monitor: &ActorContext,
+        confirmation: &LeaderboardConfirmation,
+        now_ms: i64,
+        event: &CoordinationEventRecord<'_>,
+    ) -> Result<u64, LedgerError> {
+        if monitor.role != Role::Monitor
+            || monitor.campaign_id.trim().is_empty()
+            || monitor.challenge_id.trim().is_empty()
+        {
+            return Err(LedgerError::Degraded(
+                "leaderboard confirmation requires a bound Monitor context".into(),
+            ));
+        }
+        if confirmation.schema_version != "ascodex-leaderboard-confirmation/v1"
+            || confirmation.confirmation_id.trim().is_empty()
+            || confirmation.attempt_id.trim().is_empty()
+            || confirmation.owner.trim().is_empty()
+            || confirmation.response_sha256.trim().is_empty()
+            || !matches!(
+                confirmation.state.as_str(),
+                "confirmed" | "unknown_needs_reconcile"
+            )
+        {
+            return Err(LedgerError::Degraded(
+                "leaderboard confirmation is missing required fields or has an invalid state"
+                    .into(),
+            ));
+        }
+        if event.aggregate_type != "leaderboard_confirmation"
+            || event.aggregate_id != confirmation.confirmation_id
+            || event.event_type != "leaderboard_confirmation_recorded"
+            || event.occurred_at_ms != now_ms
+        {
+            return Err(LedgerError::Degraded(
+                "leaderboard confirmation event is not bound to the confirmation".into(),
+            ));
+        }
+        let confirmation_json = serde_json::to_string(confirmation).map_err(|error| {
+            LedgerError::Degraded(format!(
+                "cannot serialize leaderboard confirmation: {error}"
+            ))
+        })?;
+        let confirmation_sha256 = sha256_bytes(confirmation_json.as_bytes());
+        let mut transaction = self.pool.begin().await?;
+        let appended = append_event_in_transaction(&mut transaction, event).await?;
+        if appended.replayed {
+            let row = sqlx::query(
+                "SELECT confirmation_json, state FROM leaderboard_confirmations WHERE confirmation_id = ?",
+            )
+            .bind(&confirmation.confirmation_id)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or_else(|| {
+                LedgerError::Degraded(
+                    "replayed leaderboard confirmation is missing its stored row".into(),
+                )
+            })?;
+            if row.try_get::<String, _>("confirmation_json")? != confirmation_json
+                || !matches!(
+                    row.try_get::<String, _>("state")?.as_str(),
+                    "confirmed" | "unknown_needs_reconcile"
+                )
+            {
+                return Err(LedgerError::Degraded(
+                    "replayed leaderboard confirmation does not match the stored row".into(),
+                ));
+            }
+            transaction.commit().await?;
+            return Ok(appended.version);
+        }
+        let event_version = i64::try_from(appended.version).map_err(|_| {
+            LedgerError::Degraded("leaderboard confirmation event version overflow".into())
+        })?;
+        sqlx::query(
+            "INSERT INTO leaderboard_confirmations (confirmation_id, attempt_id, owner, confirmation_json, confirmation_sha256, state, recorded_at_ms, event_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&confirmation.confirmation_id)
+        .bind(&confirmation.attempt_id)
+        .bind(&confirmation.owner)
+        .bind(&confirmation_json)
+        .bind(&confirmation_sha256)
+        .bind(&confirmation.state)
+        .bind(now_ms)
+        .bind(event_version)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(appended.version)
+    }
+
+    /// Load a persisted leaderboard confirmation by id, re-verifying the stored SHA-256 against
+    /// the confirmation JSON before returning it. A corrupted row fails closed.
+    pub async fn load_leaderboard_confirmation(
+        &self,
+        confirmation_id: &str,
+    ) -> Result<Option<PersistedLeaderboardConfirmation>, LedgerError> {
+        let row = sqlx::query(
+            "SELECT confirmation_id, attempt_id, owner, confirmation_json, confirmation_sha256, state, recorded_at_ms, event_version FROM leaderboard_confirmations WHERE confirmation_id = ?",
+        )
+        .bind(confirmation_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let confirmation_json: String = row.try_get("confirmation_json")?;
+        let confirmation_sha256: String = row.try_get("confirmation_sha256")?;
+        if sha256_bytes(confirmation_json.as_bytes()) != confirmation_sha256 {
+            return Err(LedgerError::Degraded(
+                "stored leaderboard confirmation hash does not match".into(),
+            ));
+        }
+        let confirmation: LeaderboardConfirmation = serde_json::from_str(&confirmation_json)
+            .map_err(|error| {
+                LedgerError::Degraded(format!(
+                    "stored leaderboard confirmation is invalid JSON: {error}"
+                ))
+            })?;
+        let state = match row.try_get::<String, _>("state")?.as_str() {
+            "confirmed" => ConfirmationState::Confirmed,
+            "unknown_needs_reconcile" => ConfirmationState::UnknownNeedsReconcile,
+            _ => {
+                return Err(LedgerError::Degraded(
+                    "stored leaderboard confirmation state is invalid".into(),
+                ));
+            }
+        };
+        let event_version = row
+            .try_get::<i64, _>("event_version")?
+            .try_into()
+            .map_err(|_| {
+                LedgerError::Degraded("stored confirmation event version is invalid".into())
+            })?;
+        Ok(Some(PersistedLeaderboardConfirmation {
+            confirmation_id: confirmation_id.to_string(),
+            request: confirmation,
+            state,
+            recorded_at_ms: row.try_get("recorded_at_ms")?,
+            event_version: Some(event_version),
+        }))
     }
 
     pub async fn load_chief_wake(
@@ -9374,7 +9570,173 @@ model:
         }
     }
 
+    fn confirmation_confirmed(attempt_id: &str, owner: &str) -> LeaderboardConfirmation {
+        LeaderboardConfirmation {
+            schema_version: "ascodex-leaderboard-confirmation/v1".to_string(),
+            confirmation_id: format!("conf-{attempt_id}"),
+            attempt_id: attempt_id.to_string(),
+            owner: owner.to_string(),
+            found: true,
+            owner_match: true,
+            score_match: true,
+            scope_match: true,
+            scope: Some("overall".to_string()),
+            state: "confirmed".to_string(),
+            reason: None,
+            response_sha256: "a".repeat(64),
+        }
+    }
+
+    fn confirmation_event<'a>(
+        event_id: &'a str,
+        idempotency_key: &'a str,
+        aggregate_id: &'a str,
+        event_type: &'a str,
+        expected_version: u64,
+        now_ms: i64,
+    ) -> CoordinationEventRecord<'a> {
+        CoordinationEventRecord {
+            event_id,
+            idempotency_key,
+            aggregate_type: "leaderboard_confirmation",
+            aggregate_id,
+            expected_version,
+            event_type,
+            payload_json: "{}",
+            occurred_at_ms: now_ms,
+        }
+    }
+
     #[tokio::test]
+    async fn leaderboard_confirmation_records_and_is_idempotent() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("ledger");
+        let monitor = monitor_actor_context("monitor-confirmation");
+        ledger
+            .provision_actor_context(&monitor, 200)
+            .await
+            .expect("provision monitor");
+        let confirmation = confirmation_confirmed("attempt-a", "owner-a");
+        let event = confirmation_event(
+            "confirmation-event-a",
+            "confirmation-key-a",
+            "conf-attempt-a",
+            "leaderboard_confirmation_recorded",
+            0,
+            200,
+        );
+        let first = ledger
+            .record_leaderboard_confirmation_audited(&monitor, &confirmation, 200, &event)
+            .await
+            .expect("record confirmation");
+        assert_eq!(first, 1);
+        let loaded = ledger
+            .load_leaderboard_confirmation("conf-attempt-a")
+            .await
+            .expect("load confirmation")
+            .expect("confirmation");
+        assert_eq!(loaded.confirmation_id, "conf-attempt-a");
+        assert_eq!(loaded.request.owner, "owner-a");
+        // Replaying the same event is a no-op.
+        let replay = ledger
+            .record_leaderboard_confirmation_audited(&monitor, &confirmation, 200, &event)
+            .await
+            .expect("replay confirmation");
+        assert_eq!(replay, 1);
+        ledger.close().await;
+    }
+
+    #[tokio::test]
+    async fn leaderboard_confirmation_rejects_non_monitor_or_unbound() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("ledger");
+        let monitor = monitor_actor_context("monitor-confirmation-reject");
+        ledger
+            .provision_actor_context(&monitor, 200)
+            .await
+            .expect("provision monitor");
+        let confirmation = confirmation_confirmed("attempt-a", "owner-a");
+        let event = confirmation_event(
+            "confirmation-event-a",
+            "confirmation-key-a",
+            "conf-attempt-a",
+            "leaderboard_confirmation_recorded",
+            0,
+            200,
+        );
+        // Reusing a chief/solver context must fail closed.
+        let chief = chief_actor_context("chief-confirmation");
+        assert!(
+            ledger
+                .record_leaderboard_confirmation_audited(&chief, &confirmation, 200, &event)
+                .await
+                .is_err()
+        );
+        // Missing owner must fail closed.
+        let no_owner = confirmation_confirmed("attempt-b", "");
+        assert!(
+            ledger
+                .record_leaderboard_confirmation_audited(&monitor, &no_owner, 200, &event)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn leaderboard_confirmation_events_fail_closed_on_aggregate_and_version() {
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("ledger");
+        let monitor = monitor_actor_context("monitor-confirmation-events");
+        ledger
+            .provision_actor_context(&monitor, 200)
+            .await
+            .expect("provision monitor");
+        let confirmation = confirmation_confirmed("attempt-a", "owner-a");
+        // Wrong aggregate type for the event.
+        let mut wrong = confirmation_event(
+            "confirmation-event-a",
+            "confirmation-key-a",
+            "conf-attempt-a",
+            "leaderboard_confirmation_recorded",
+            0,
+            200,
+        );
+        wrong.aggregate_type = "campaign";
+        assert!(
+            ledger
+                .record_leaderboard_confirmation_audited(&monitor, &confirmation, 200, &wrong)
+                .await
+                .is_err()
+        );
+        // Event time must match the record time.
+        let wrong_time = confirmation_event(
+            "confirmation-event-a",
+            "confirmation-key-b",
+            "conf-attempt-a",
+            "leaderboard_confirmation_recorded",
+            0,
+            999,
+        );
+        assert!(
+            ledger
+                .record_leaderboard_confirmation_audited(&monitor, &confirmation, 200, &wrong_time)
+                .await
+                .is_err()
+        );
+        // Stale expected version must not overwrite.
+        let stale = confirmation_event(
+            "confirmation-event-a",
+            "confirmation-key-c",
+            "conf-attempt-a",
+            "leaderboard_confirmation_recorded",
+            5,
+            200,
+        );
+        assert!(
+            ledger
+                .record_leaderboard_confirmation_audited(&monitor, &confirmation, 200, &stale)
+                .await
+                .is_err()
+        );
+    }
+
     async fn chief_wake_records_and_binds_to_applied_reconciliation() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().join("wake.sqlite");

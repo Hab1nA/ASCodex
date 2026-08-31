@@ -6,7 +6,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const USAGE: &str = "usage: ascodex-observation-admin <record|inspect|reconcile|reconcile-batch|inspect-reconcile> --ledger <absolute-path> [options]";
+const USAGE: &str = "usage: ascodex-observation-admin <record|record-confirmation|inspect|reconcile|reconcile-batch|inspect-reconcile> --ledger <absolute-path> [options]";
 
 #[tokio::main]
 async fn main() {
@@ -60,6 +60,44 @@ async fn run() -> Result<(), String> {
                     "attempt_id": persisted.attempt_id,
                     "observation_sha256": persisted.observation_sha256,
                     "event_version": persisted.event_version,
+                })
+            );
+        }
+        "record-confirmation" => {
+            let monitor_path = absolute_path(required(&options, "--monitor-context")?)?;
+            let confirmation_path = absolute_path(required(&options, "--confirmation")?)?;
+            let monitor: ActorContext =
+                serde_json::from_slice(&fs::read(monitor_path).map_err(|error| error.to_string())?)
+                    .map_err(|error| error.to_string())?;
+            let confirmation: codex_solver_guard::LeaderboardConfirmation = serde_json::from_slice(
+                &fs::read(confirmation_path).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?;
+            let payload =
+                serde_json::to_string(&confirmation).map_err(|error| error.to_string())?;
+            let now_ms = trusted_now_ms()?;
+            let event = CoordinationEventRecord {
+                event_id: required(&options, "--event-id")?,
+                idempotency_key: required(&options, "--idempotency-key")?,
+                aggregate_type: "leaderboard_confirmation",
+                aggregate_id: &confirmation.confirmation_id,
+                expected_version: parse_version(required(&options, "--expected-version")?)?,
+                event_type: "leaderboard_confirmation_recorded",
+                payload_json: &payload,
+                occurred_at_ms: now_ms,
+            };
+            let version = ledger
+                .record_leaderboard_confirmation_audited(&monitor, &confirmation, now_ms, &event)
+                .await
+                .map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                json!({
+                    "status": "recorded",
+                    "confirmation_id": confirmation.confirmation_id,
+                    "attempt_id": confirmation.attempt_id,
+                    "owner": confirmation.owner,
+                    "event_version": version,
                 })
             );
         }
