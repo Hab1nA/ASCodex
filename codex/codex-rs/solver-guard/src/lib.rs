@@ -1504,6 +1504,41 @@ pub struct PlatformReconciliationApplyOutcome {
     pub result: ReconciliationApplyResult,
 }
 
+/// Typed Chief wake request as written by the reconciliation scheduler. It names the applied
+/// reconciliation fact (event version + response hash) that the Chief is being asked to review.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChiefWakeRequest {
+    pub schema_version: String,
+    pub wake_id: String,
+    pub campaign_id: String,
+    pub challenge_id: String,
+    pub stream_id: String,
+    pub event_version: i64,
+    pub cursor_position: u64,
+    pub response_sha256: String,
+    pub summary_path: Option<String>,
+    pub reason: String,
+    pub platform_write_attempted: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChiefWakeState {
+    Waiting,
+    Acked,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PersistedChiefWake {
+    pub wake_id: String,
+    pub request: ChiefWakeRequest,
+    pub state: ChiefWakeState,
+    pub recorded_at_ms: i64,
+    pub acked_at_ms: Option<i64>,
+    pub event_version: Option<u64>,
+}
+
 #[derive(Debug, Clone)]
 struct PersistedReconciliationSnapshot {
     campaign_id: String,
@@ -1630,6 +1665,11 @@ impl Ledger {
         .await?;
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS identity_pool_entries (name TEXT NOT NULL, challenge_id TEXT NOT NULL, owner TEXT NOT NULL, identity_class TEXT NOT NULL, frozen INTEGER NOT NULL, max_reserved_cost_usd REAL, max_concurrent_reservations INTEGER, min_interval_seconds INTEGER, provisioned_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL, removed_at_ms INTEGER, PRIMARY KEY (name, challenge_id, owner, identity_class))",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS chief_wake_requests (wake_id TEXT PRIMARY KEY, request_json TEXT NOT NULL, request_sha256 TEXT NOT NULL, state TEXT NOT NULL, recorded_at_ms INTEGER NOT NULL, acked_at_ms INTEGER, event_version INTEGER NOT NULL)",
         )
         .execute(&pool)
         .await?;
@@ -4147,6 +4187,245 @@ impl Ledger {
         Ok(appended.version)
     }
 
+    /// Persist a Chief wake request from the reconciliation scheduler. The wake is bound to an
+    /// actually applied reconciliation fact (matching campaign snapshot event version and an
+    /// item response hash); a wake that names no applied fact fails closed. Replaying the same
+    /// wake idempotency key is a no-op that returns the original version.
+    pub async fn record_chief_wake_audited(
+        &self,
+        wake: &ChiefWakeRequest,
+        campaign_id: &str,
+        now_ms: i64,
+        event: &CoordinationEventRecord<'_>,
+    ) -> Result<u64, LedgerError> {
+        if wake.wake_id.trim().is_empty()
+            || wake.campaign_id.trim().is_empty()
+            || wake.challenge_id.trim().is_empty()
+            || wake.stream_id.trim().is_empty()
+            || wake.response_sha256.trim().is_empty()
+            || wake.schema_version != "ascodex-chief-wake-request/v1"
+            || wake.platform_write_attempted
+        {
+            return Err(LedgerError::Degraded(
+                "chief wake request is missing required fields or violates the read-only contract"
+                    .into(),
+            ));
+        }
+        if campaign_id != wake.campaign_id {
+            return Err(LedgerError::Degraded(
+                "chief wake campaign does not match the caller binding".into(),
+            ));
+        }
+        if event.aggregate_type != "chief_wake"
+            || event.aggregate_id != wake.wake_id
+            || event.event_type != "chief_wake_requested"
+            || event.occurred_at_ms != now_ms
+        {
+            return Err(LedgerError::Degraded(
+                "chief wake event is not bound to the wake request".into(),
+            ));
+        }
+        // The wake must reference an actually applied reconciliation fact.
+        let snapshot =
+            load_reconciliation_snapshot(&self.pool, &wake.stream_id, &wake.challenge_id).await?;
+        let persisted = snapshot.ok_or_else(|| {
+            LedgerError::Degraded(
+                "chief wake references a reconciliation stream that was never applied".into(),
+            )
+        })?;
+        if persisted.campaign_id != campaign_id
+            || persisted.event_version
+                != Some(u64::try_from(wake.event_version).map_err(|_| {
+                    LedgerError::Degraded("chief wake event version is invalid".into())
+                })?)
+        {
+            return Err(LedgerError::Degraded(
+                "chief wake event version does not match the applied reconciliation snapshot"
+                    .into(),
+            ));
+        }
+        let item_hit: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM reconciliation_items WHERE stream_id = ? AND challenge_id = ? AND response_sha256 = ? AND event_version = ?",
+        )
+        .bind(&wake.stream_id)
+        .bind(&wake.challenge_id)
+        .bind(&wake.response_sha256)
+        .bind(wake.event_version)
+        .fetch_one(&self.pool)
+        .await?;
+        if item_hit == 0 {
+            return Err(LedgerError::Degraded(
+                "chief wake references no applied reconciliation item with that response hash"
+                    .into(),
+            ));
+        }
+        let request_json = serde_json::to_string(wake).map_err(|error| {
+            LedgerError::Degraded(format!("cannot serialize chief wake request: {error}"))
+        })?;
+        let request_sha256 = sha256_bytes(request_json.as_bytes());
+        let mut transaction = self.pool.begin().await?;
+        let appended = append_event_in_transaction(&mut transaction, event).await?;
+        if appended.replayed {
+            let row = sqlx::query(
+                "SELECT request_json, state, acked_at_ms FROM chief_wake_requests WHERE wake_id = ?",
+            )
+            .bind(&wake.wake_id)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or_else(|| {
+                LedgerError::Degraded("replayed chief wake is missing its stored request".into())
+            })?;
+            if row.try_get::<String, _>("request_json")? != request_json
+                || row.try_get::<String, _>("state")?
+                    != chief_wake_state_name(&ChiefWakeState::Waiting)
+                || row.try_get::<Option<i64>, _>("acked_at_ms")?.is_some()
+            {
+                return Err(LedgerError::Degraded(
+                    "replayed chief wake does not match the stored request".into(),
+                ));
+            }
+            transaction.commit().await?;
+            return Ok(appended.version);
+        }
+        let event_version = i64::try_from(appended.version)
+            .map_err(|_| LedgerError::Degraded("chief wake event version overflow".into()))?;
+        sqlx::query(
+            "INSERT INTO chief_wake_requests (wake_id, request_json, request_sha256, state, recorded_at_ms, acked_at_ms, event_version) VALUES (?, ?, ?, 'waiting', ?, NULL, ?)",
+        )
+        .bind(&wake.wake_id)
+        .bind(&request_json)
+        .bind(&request_sha256)
+        .bind(now_ms)
+        .bind(event_version)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(appended.version)
+    }
+
+    pub async fn load_chief_wake(
+        &self,
+        wake_id: &str,
+    ) -> Result<Option<PersistedChiefWake>, LedgerError> {
+        let row = sqlx::query(
+            "SELECT request_json, request_sha256, state, recorded_at_ms, acked_at_ms, event_version FROM chief_wake_requests WHERE wake_id = ?",
+        )
+        .bind(wake_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let request_json: String = row.try_get("request_json")?;
+        let request_sha256: String = row.try_get("request_sha256")?;
+        if sha256_bytes(request_json.as_bytes()) != request_sha256 {
+            return Err(LedgerError::Degraded(
+                "stored chief wake request hash does not match".into(),
+            ));
+        }
+        let request: ChiefWakeRequest = serde_json::from_str(&request_json).map_err(|error| {
+            LedgerError::Degraded(format!(
+                "stored chief wake request is invalid JSON: {error}"
+            ))
+        })?;
+        let state = match row.try_get::<String, _>("state")?.as_str() {
+            "waiting" => ChiefWakeState::Waiting,
+            "acked" => ChiefWakeState::Acked,
+            _ => {
+                return Err(LedgerError::Degraded(
+                    "stored chief wake state is invalid".into(),
+                ));
+            }
+        };
+        let event_version = row
+            .try_get::<i64, _>("event_version")?
+            .try_into()
+            .map_err(|_| {
+                LedgerError::Degraded("stored chief wake event version is invalid".into())
+            })?;
+        Ok(Some(PersistedChiefWake {
+            wake_id: wake_id.to_string(),
+            request,
+            state,
+            recorded_at_ms: row.try_get("recorded_at_ms")?,
+            acked_at_ms: row.try_get("acked_at_ms")?,
+            event_version: Some(event_version),
+        }))
+    }
+
+    /// Acknowledge a waiting Chief wake request atomically with its audit event. Acking a
+    /// missing, already-acked, or already-removed wake fails closed.
+    pub async fn ack_chief_wake_audited(
+        &self,
+        wake_id: &str,
+        now_ms: i64,
+        event: &CoordinationEventRecord<'_>,
+    ) -> Result<u64, LedgerError> {
+        if event.aggregate_type != "chief_wake"
+            || event.aggregate_id != wake_id
+            || event.event_type != "chief_wake_acked"
+            || event.occurred_at_ms != now_ms
+        {
+            return Err(LedgerError::Degraded(
+                "chief wake event is not bound to the wake ack".into(),
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        let appended = append_event_in_transaction(&mut transaction, event).await?;
+        if appended.replayed {
+            let row =
+                sqlx::query("SELECT state, acked_at_ms FROM chief_wake_requests WHERE wake_id = ?")
+                    .bind(wake_id)
+                    .fetch_optional(&mut *transaction)
+                    .await?
+                    .ok_or_else(|| {
+                        LedgerError::Degraded(
+                            "replayed chief wake ack is missing its stored request".into(),
+                        )
+                    })?;
+            if row.try_get::<String, _>("state")? != chief_wake_state_name(&ChiefWakeState::Acked)
+                || row.try_get::<Option<i64>, _>("acked_at_ms")? != Some(now_ms)
+            {
+                return Err(LedgerError::Degraded(
+                    "replayed chief wake ack does not match the stored state".into(),
+                ));
+            }
+            transaction.commit().await?;
+            return Ok(appended.version);
+        }
+        let result = sqlx::query(
+            "UPDATE chief_wake_requests SET state = 'acked', acked_at_ms = ? WHERE wake_id = ? AND state = 'waiting'",
+        )
+        .bind(now_ms)
+        .bind(wake_id)
+        .execute(&mut *transaction)
+        .await?;
+        if result.rows_affected() == 0 {
+            return Err(LedgerError::Degraded(
+                "chief wake is missing or already acked".into(),
+            ));
+        }
+        transaction.commit().await?;
+        Ok(appended.version)
+    }
+
+    /// List Chief wake requests that are still waiting for an ack, oldest first.
+    pub async fn list_waiting_chief_wakes(&self) -> Result<Vec<PersistedChiefWake>, LedgerError> {
+        let rows = sqlx::query(
+            "SELECT wake_id FROM chief_wake_requests WHERE state = 'waiting' ORDER BY recorded_at_ms ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let mut wakes = Vec::with_capacity(rows.len());
+        for row in rows {
+            let wake_id: String = row.try_get("wake_id")?;
+            wakes.push(self.load_chief_wake(&wake_id).await?.ok_or_else(|| {
+                LedgerError::Degraded("waiting chief wake row is missing its stored request".into())
+            })?);
+        }
+        Ok(wakes)
+    }
+
     pub async fn release(&self, id: &str) -> Result<(), LedgerError> {
         let mut transaction = self.pool.begin().await?;
         let result = sqlx::query(
@@ -4440,6 +4719,13 @@ fn reconciliation_item_state_name(item: &PlatformReconcileItem) -> &'static str 
     match item.state {
         PlatformReconcileItemState::Observation { .. } => "observation",
         PlatformReconcileItemState::UnknownNeedsReconcile { .. } => "unknown_needs_reconcile",
+    }
+}
+
+fn chief_wake_state_name(state: &ChiefWakeState) -> &'static str {
+    match state {
+        ChiefWakeState::Waiting => "waiting",
+        ChiefWakeState::Acked => "acked",
     }
 }
 
@@ -8077,6 +8363,364 @@ model:
             Some(1)
         );
         assert!(persisted.snapshot.attempts.contains_key("attempt-a"));
+    }
+
+    fn chief_wake(
+        wake_id: &str,
+        campaign_id: &str,
+        challenge_id: &str,
+        stream_id: &str,
+        event_version: i64,
+        response_sha256: &str,
+    ) -> ChiefWakeRequest {
+        ChiefWakeRequest {
+            schema_version: "ascodex-chief-wake-request/v1".to_string(),
+            wake_id: wake_id.to_string(),
+            campaign_id: campaign_id.to_string(),
+            challenge_id: challenge_id.to_string(),
+            stream_id: stream_id.to_string(),
+            event_version,
+            cursor_position: 1,
+            response_sha256: response_sha256.to_string(),
+            summary_path: None,
+            reason: "platform_reconciliation_applied".to_string(),
+            platform_write_attempted: false,
+        }
+    }
+
+    fn wake_event<'a>(
+        event_id: &'a str,
+        idempotency_key: &'a str,
+        aggregate_id: &'a str,
+        event_type: &'a str,
+        expected_version: u64,
+        now_ms: i64,
+    ) -> CoordinationEventRecord<'a> {
+        CoordinationEventRecord {
+            event_id,
+            idempotency_key,
+            aggregate_type: "chief_wake",
+            aggregate_id,
+            expected_version,
+            event_type,
+            payload_json: "{}",
+            occurred_at_ms: now_ms,
+        }
+    }
+
+    #[tokio::test]
+    async fn chief_wake_records_and_binds_to_applied_reconciliation() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("wake.sqlite");
+        let ledger = Ledger::connect_file(&path).await.expect("connect");
+        let monitor = monitor_actor_context("monitor-wake");
+        ledger
+            .provision_actor_context(&monitor, 200)
+            .await
+            .expect("provision monitor");
+        let item = reconciliation_item(1, "attempt-a", 'd');
+        let payload = serde_json::to_string(&item).expect("item payload");
+        let event = CoordinationEventRecord {
+            event_id: "reconcile-event-a",
+            idempotency_key: "reconcile-key-a",
+            aggregate_type: "campaign",
+            aggregate_id: "campaign-a",
+            expected_version: 0,
+            event_type: "platform_reconciliation_recorded",
+            payload_json: &payload,
+            occurred_at_ms: 200,
+        };
+        let applied = ledger
+            .apply_platform_reconciliation_audited(&monitor, &item, 200, &event)
+            .await
+            .expect("apply reconciliation");
+        let event_version = applied.persisted.event_version.expect("event version");
+        let wake = chief_wake(
+            "wake-1",
+            "campaign-a",
+            "challenge-a",
+            "challenge-a/attempts",
+            event_version as i64,
+            &item.response_sha256,
+        );
+        let version = ledger
+            .record_chief_wake_audited(
+                &wake,
+                "campaign-a",
+                200,
+                &wake_event(
+                    "wake-event-1",
+                    "wake-key-1",
+                    "wake-1",
+                    "chief_wake_requested",
+                    0,
+                    200,
+                ),
+            )
+            .await
+            .expect("record wake");
+        assert_eq!(version, 1);
+        assert_eq!(
+            ledger
+                .load_chief_wake("wake-1")
+                .await
+                .expect("load wake")
+                .expect("wake")
+                .state,
+            ChiefWakeState::Waiting
+        );
+        // Replaying the same wake is a no-op.
+        assert_eq!(
+            ledger
+                .record_chief_wake_audited(
+                    &wake,
+                    "campaign-a",
+                    200,
+                    &wake_event(
+                        "wake-event-1",
+                        "wake-key-1",
+                        "wake-1",
+                        "chief_wake_requested",
+                        0,
+                        200
+                    ),
+                )
+                .await
+                .expect("replay wake"),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn chief_wake_rejects_unapplied_or_mismatched_reconciliation() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("wake-reject.sqlite");
+        let ledger = Ledger::connect_file(&path).await.expect("connect");
+        // No reconciliation was applied: the wake must fail closed.
+        let wake = chief_wake(
+            "wake-1",
+            "campaign-a",
+            "challenge-a",
+            "challenge-a/attempts",
+            1,
+            &"d".repeat(64),
+        );
+        assert!(
+            ledger
+                .record_chief_wake_audited(
+                    &wake,
+                    "campaign-a",
+                    200,
+                    &wake_event(
+                        "wake-event-1",
+                        "wake-key-1",
+                        "wake-1",
+                        "chief_wake_requested",
+                        0,
+                        200
+                    ),
+                )
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn chief_wake_ack_fail_closed_on_state_and_binding() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("wake-ack.sqlite");
+        let ledger = Ledger::connect_file(&path).await.expect("connect");
+        let monitor = monitor_actor_context("monitor-wake-ack");
+        ledger
+            .provision_actor_context(&monitor, 200)
+            .await
+            .expect("provision monitor");
+        let item = reconciliation_item(1, "attempt-a", 'd');
+        let payload = serde_json::to_string(&item).expect("item payload");
+        let event = CoordinationEventRecord {
+            event_id: "reconcile-event-a",
+            idempotency_key: "reconcile-key-a",
+            aggregate_type: "campaign",
+            aggregate_id: "campaign-a",
+            expected_version: 0,
+            event_type: "platform_reconciliation_recorded",
+            payload_json: &payload,
+            occurred_at_ms: 200,
+        };
+        let applied = ledger
+            .apply_platform_reconciliation_audited(&monitor, &item, 200, &event)
+            .await
+            .expect("apply reconciliation");
+        let event_version = applied.persisted.event_version.expect("event version");
+        let wake = chief_wake(
+            "wake-1",
+            "campaign-a",
+            "challenge-a",
+            "challenge-a/attempts",
+            event_version as i64,
+            &item.response_sha256,
+        );
+        ledger
+            .record_chief_wake_audited(
+                &wake,
+                "campaign-a",
+                200,
+                &wake_event(
+                    "wake-event-1",
+                    "wake-key-1",
+                    "wake-1",
+                    "chief_wake_requested",
+                    0,
+                    200,
+                ),
+            )
+            .await
+            .expect("record wake");
+        // Wrong event type for the ack transition.
+        assert!(
+            ledger
+                .ack_chief_wake_audited(
+                    "wake-1",
+                    300,
+                    &wake_event(
+                        "wake-event-2",
+                        "wake-key-2",
+                        "wake-1",
+                        "chief_wake_requested",
+                        1,
+                        300
+                    ),
+                )
+                .await
+                .is_err()
+        );
+        // Wrong aggregate id.
+        assert!(
+            ledger
+                .ack_chief_wake_audited(
+                    "wake-1",
+                    300,
+                    &wake_event(
+                        "wake-event-2",
+                        "wake-key-3",
+                        "other-wake",
+                        "chief_wake_acked",
+                        1,
+                        300
+                    ),
+                )
+                .await
+                .is_err()
+        );
+        // Correct ack applies.
+        ledger
+            .ack_chief_wake_audited(
+                "wake-1",
+                300,
+                &wake_event(
+                    "wake-event-2",
+                    "wake-key-4",
+                    "wake-1",
+                    "chief_wake_acked",
+                    1,
+                    300,
+                ),
+            )
+            .await
+            .expect("ack wake");
+        assert_eq!(
+            ledger
+                .load_chief_wake("wake-1")
+                .await
+                .expect("load wake")
+                .expect("wake")
+                .state,
+            ChiefWakeState::Acked
+        );
+        // Double-ack fails closed.
+        assert!(
+            ledger
+                .ack_chief_wake_audited(
+                    "wake-1",
+                    400,
+                    &wake_event(
+                        "wake-event-3",
+                        "wake-key-5",
+                        "wake-1",
+                        "chief_wake_acked",
+                        2,
+                        400
+                    ),
+                )
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn chief_wake_events_fail_closed_on_aggregate_and_version() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("wake-agg.sqlite");
+        let ledger = Ledger::connect_file(&path).await.expect("connect");
+        let monitor = monitor_actor_context("monitor-wake-agg");
+        ledger
+            .provision_actor_context(&monitor, 200)
+            .await
+            .expect("provision monitor");
+        let item = reconciliation_item(1, "attempt-a", 'd');
+        let payload = serde_json::to_string(&item).expect("item payload");
+        let event = CoordinationEventRecord {
+            event_id: "reconcile-event-a",
+            idempotency_key: "reconcile-key-a",
+            aggregate_type: "campaign",
+            aggregate_id: "campaign-a",
+            expected_version: 0,
+            event_type: "platform_reconciliation_recorded",
+            payload_json: &payload,
+            occurred_at_ms: 200,
+        };
+        let applied = ledger
+            .apply_platform_reconciliation_audited(&monitor, &item, 200, &event)
+            .await
+            .expect("apply reconciliation");
+        let event_version = applied.persisted.event_version.expect("event version");
+        let wake = chief_wake(
+            "wake-1",
+            "campaign-a",
+            "challenge-a",
+            "challenge-a/attempts",
+            event_version as i64,
+            &item.response_sha256,
+        );
+        // Aggregate type must be "chief_wake".
+        let mut wrong_aggregate = wake_event(
+            "wake-event-1",
+            "wake-key-1",
+            "wake-1",
+            "chief_wake_requested",
+            0,
+            200,
+        );
+        wrong_aggregate.aggregate_type = "campaign";
+        assert!(
+            ledger
+                .record_chief_wake_audited(&wake, "campaign-a", 200, &wrong_aggregate)
+                .await
+                .is_err()
+        );
+        // Correct aggregate type applies.
+        let correct_event = wake_event(
+            "wake-event-1",
+            "wake-key-1",
+            "wake-1",
+            "chief_wake_requested",
+            0,
+            200,
+        );
+        ledger
+            .record_chief_wake_audited(&wake, "campaign-a", 200, &correct_event)
+            .await
+            .expect("record wake");
     }
 
     #[tokio::test]

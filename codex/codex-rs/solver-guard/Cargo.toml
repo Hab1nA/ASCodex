@@ -24,6 +24,10 @@ path = "src/bin/observation_admin.rs"
 name = "ascodex-pool-admin"
 path = "src/bin/pool_admin.rs"
 
+[[bin]]
+name = "ascodex-wake-admin"
+path = "src/bin/wake_admin.rs"
+
 
 [lints]
 workspace = true
