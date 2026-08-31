@@ -35,7 +35,7 @@ $env:RUSTC = 'C:\Users\XKZ\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin\
 
 脚本只使用离线 Cargo 构建，不写入凭据，不开启真实 Bohrium 提交。
 
-只读平台响应可用 `scripts/ascodex_monitor.py` 固化为协调器观测证据，`scripts/ascodex_leaderboard_check.py` 可离线校验 owned attempt 是否出现在官方榜单（owner/有效分/榜范围匹配，输出 typed confirmation）。这些工具不联网，要求输入已由只读客户端保存的 JSON 响应；它们会校验 challenge/attempt 归属、replay、results、scorecard、leaderboard 和分数范围，并原子写出带响应 SHA-256 的 observation / confirmation：
+只读平台响应可用 `scripts/ascodex_monitor.py` 固化为协调器观测证据，`scripts/ascodex_leaderboard_check.py` 可离线校验 owned attempt 是否出现在官方榜单（owner/有效分/榜范围匹配，输出 typed confirmation），`scripts/ascodex_schema.py` 提供 typed schema 归一化注册表（字段别名/类型/必填声明式，必需字段缺失或类型不符 fail-closed）。这些工具不联网，要求输入已由只读客户端保存的 JSON 响应；它们会校验 challenge/attempt 归属、replay、results、scorecard、leaderboard 和分数范围，并原子写出带响应 SHA-256 的 observation / confirmation：
 
 ```powershell
 python scripts/ascodex_monitor.py `
