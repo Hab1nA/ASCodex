@@ -263,7 +263,9 @@ impl SolverGuardSubmitHandler {
                 });
             }
         };
+        let workspace = Path::new(&args.workspace);
         if let Err(err) = validate_submission_contract_files(
+            workspace,
             &std::env::var("ASCODEX_CONTRACT_FILE").unwrap_or_default(),
             &std::env::var("ASCODEX_CONTRACT_INPUT_FILE").unwrap_or_default(),
             &args.challenge_id,
@@ -276,7 +278,6 @@ impl SolverGuardSubmitHandler {
                 "reason": format!("contract gate blocked: {err}"),
             });
         }
-        let workspace = Path::new(&args.workspace);
         let trace = match codex_solver_guard::validate_trace_evidence(
             workspace,
             Path::new(&args.trace_path),
@@ -517,6 +518,7 @@ impl SolverGuardSubmitHandler {
 }
 
 fn validate_submission_contract_files(
+    workspace: &Path,
     contract_file: &str,
     fingerprint_input_file: &str,
     expected_challenge_id: &str,
@@ -533,6 +535,15 @@ fn validate_submission_contract_files(
     ] {
         if !Path::new(path).is_absolute() {
             return Err(format!("{name} must be an absolute path"));
+        }
+        // The contract and fingerprint input must live inside the assigned workspace so a
+        // misconfigured environment variable cannot point the gate at an unrelated file.
+        let canonical = std::fs::canonicalize(path)
+            .map_err(|error| format!("cannot resolve {name}: {error}"))?;
+        let canonical_workspace = std::fs::canonicalize(workspace)
+            .map_err(|error| format!("cannot resolve workspace: {error}"))?;
+        if !canonical.starts_with(&canonical_workspace) {
+            return Err(format!("{name} is outside the assigned workspace"));
         }
     }
     let contract_bytes = std::fs::read(contract_file)
@@ -613,7 +624,9 @@ mod tests {
 
     #[test]
     fn submission_contract_requires_absolute_paths() {
+        let dir = tempdir().expect("tempdir");
         let error = validate_submission_contract_files(
+            dir.path(),
             "relative-contract.json",
             "/absolute-input.json",
             "challenge-a",
@@ -687,6 +700,7 @@ mod tests {
 
         make_contract("known", Some("adapter-v1"));
         validate_submission_contract_files(
+            dir.path(),
             contract_path.to_str().expect("utf-8 path"),
             input_path.to_str().expect("utf-8 path"),
             "challenge-a",
@@ -696,6 +710,7 @@ mod tests {
 
         make_contract("unknown", None);
         let error = validate_submission_contract_files(
+            dir.path(),
             contract_path.to_str().expect("utf-8 path"),
             input_path.to_str().expect("utf-8 path"),
             "challenge-a",
@@ -707,6 +722,7 @@ mod tests {
         std::fs::write(&input_path, b"changed").expect("tamper input");
         make_contract("known", Some("adapter-v1"));
         let error = validate_submission_contract_files(
+            dir.path(),
             contract_path.to_str().expect("utf-8 path"),
             input_path.to_str().expect("utf-8 path"),
             "challenge-a",
@@ -714,5 +730,24 @@ mod tests {
         )
         .expect_err("fingerprint mismatch must fail closed");
         assert!(error.contains("fingerprint"));
+    }
+
+    #[test]
+    fn submission_contract_outside_workspace_fails_closed() {
+        let dir = tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        // Contract lives outside the workspace: the path-traversal gate must reject it.
+        let contract_path = dir.path().join("contract.json");
+        std::fs::write(&contract_path, "{}").expect("write contract");
+        let error = validate_submission_contract_files(
+            &workspace,
+            contract_path.to_str().expect("utf-8 path"),
+            contract_path.to_str().expect("utf-8 path"),
+            "challenge-a",
+            300,
+        )
+        .expect_err("contract outside the workspace must fail closed");
+        assert!(error.contains("outside the assigned workspace"));
     }
 }
