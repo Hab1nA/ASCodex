@@ -701,6 +701,9 @@ pub struct ExecutionRecord {
     pub status: String,
     pub exit_code: i64,
     pub run_log_sha256: String,
+    /// Canonical paths of business artifacts declared by the execution manifest
+    /// (`execution.artifacts`). Empty when the manifest does not declare any.
+    pub declared_artifact_paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -831,6 +834,25 @@ pub fn validate_execution_record(
             "run log modification time is outside the execution window".into(),
         ));
     }
+    // Execution manifests may declare the business artifacts they produced. Each declared path
+    // must live inside the workspace; hashes are verified later against the artifact manifest
+    // by `validate_cross_references`.
+    let mut declared_artifact_paths = Vec::new();
+    if let Some(artifacts) = object.get("artifacts").and_then(JsonValue::as_array) {
+        for entry in artifacts {
+            let raw = entry
+                .get("path")
+                .and_then(JsonValue::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    TraceValidationError::Invalid(
+                        "execution artifact entry requires a non-empty path".into(),
+                    )
+                })?;
+            let path = canonical_evidence_path(&workspace, Path::new(raw))?;
+            declared_artifact_paths.push(path);
+        }
+    }
     Ok(ExecutionRecord {
         run_id,
         session_id,
@@ -843,7 +865,109 @@ pub fn validate_execution_record(
         status,
         exit_code,
         run_log_sha256,
+        declared_artifact_paths,
     })
+}
+
+/// Cross-reference the execution record against the artifact manifest.
+///
+/// When the execution manifest declares artifacts, every declared path must appear in the
+/// artifact manifest (with the same hash) — otherwise the submission mixes two unrelated
+/// provenance claims. When the execution manifest declares no artifacts, every artifact in the
+/// manifest must still have been produced inside the execution window (mtime within
+/// `[ran_at - 5min, ran_at + wall + 5min]`), so a stale or unrelated artifact cannot ride along.
+pub fn validate_cross_references(
+    workspace: &Path,
+    execution_manifest_path: &Path,
+    artifact_manifest_path: &Path,
+) -> Result<(), TraceValidationError> {
+    let workspace = workspace.canonicalize()?;
+    let execution_path = canonical_evidence_path(&workspace, execution_manifest_path)?;
+    let artifact_path = canonical_evidence_path(&workspace, artifact_manifest_path)?;
+
+    let execution_json: JsonValue =
+        serde_json::from_str(&std::fs::read_to_string(&execution_path)?)
+            .map_err(|err| TraceValidationError::Invalid(format!("execution manifest: {err}")))?;
+    let artifact_json: ArtifactManifest =
+        serde_json::from_str(&std::fs::read_to_string(&artifact_path)?)
+            .map_err(|err| TraceValidationError::Invalid(format!("artifact manifest: {err}")))?;
+
+    let execution = execution_json
+        .get("execution")
+        .and_then(JsonValue::as_object)
+        .ok_or_else(|| TraceValidationError::Invalid("execution must be a JSON object".into()))?;
+    let ran_at_ms = parse_execution_timestamp(execution)?;
+    let wall_time_ms = parse_execution_wall_time(execution)?;
+    let window_start = ran_at_ms.saturating_sub(5 * 60 * 1000);
+    let window_end = ran_at_ms
+        .saturating_add(wall_time_ms)
+        .saturating_add(5 * 60 * 1000);
+
+    // Reuse the strict manifest validation (hash check, evidence-name ban, duplicate rejection).
+    let verified_artifacts = validate_artifact_manifest(&workspace, &artifact_json)?;
+
+    let declared = execution
+        .get("artifacts")
+        .and_then(JsonValue::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    if !declared.is_empty() {
+        if verified_artifacts.is_empty() {
+            return Err(TraceValidationError::Invalid(
+                "execution declares artifacts but the artifact manifest is empty".into(),
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        for entry in declared {
+            let raw = entry
+                .get("path")
+                .and_then(JsonValue::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    TraceValidationError::Invalid(
+                        "execution artifact entry requires a non-empty path".into(),
+                    )
+                })?;
+            let canonical = canonical_evidence_path(&workspace, Path::new(raw))?;
+            let declared_hash = entry
+                .get("sha256")
+                .and_then(JsonValue::as_str)
+                .filter(|value| {
+                    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+                .ok_or_else(|| {
+                    TraceValidationError::Invalid(format!(
+                        "execution artifact {raw} requires a 64-character sha256"
+                    ))
+                })?;
+            if !verified_artifacts
+                .get(&canonical)
+                .is_some_and(|hash| hash.eq_ignore_ascii_case(declared_hash))
+            {
+                return Err(TraceValidationError::Invalid(format!(
+                    "execution artifact {raw} is absent from the artifact manifest or its hash differs"
+                )));
+            }
+            if !seen.insert(canonical) {
+                return Err(TraceValidationError::Invalid(format!(
+                    "execution declares duplicate artifact {raw}"
+                )));
+            }
+        }
+        return Ok(());
+    }
+
+    // No declared artifacts: every manifest artifact must fall inside the execution window.
+    for (path, _) in &verified_artifacts {
+        let modified_ms = file_modified_ms(path)?;
+        if modified_ms < window_start || modified_ms > window_end {
+            return Err(TraceValidationError::Invalid(format!(
+                "artifact {} was not produced inside the execution window",
+                path.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn parse_execution_timestamp(
@@ -7759,6 +7883,107 @@ bohr:
                 Path::new("artifacts.json"),
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn cross_references_bind_execution_artifacts_to_manifest() {
+        let dir = tempdir().expect("tempdir");
+        let root = dir.path();
+        let artifact = root.join("answer.txt");
+        std::fs::write(&artifact, "answer=1\n").expect("artifact");
+        let hash = sha256_file(&artifact).expect("hash");
+        let ran_at = 1_700_000_000_000i64;
+        let manifest = root.join("execution.json");
+        let write_execution = |with_artifacts: bool| {
+            let mut execution = serde_json::json!({
+                "execution": {
+                    "run_id": "run-1",
+                    "session_id": "sess-1",
+                    "agent_id": "agent-1",
+                    "entrypoint": "python solve.py",
+                    "status": "ok",
+                    "exit_code": 0,
+                    "log_path": "run.log",
+                    "cwd": ".",
+                    "ran_at_ms": ran_at,
+                    "wall_time_ms": 1_000,
+                }
+            });
+            if with_artifacts {
+                execution["execution"]["artifacts"] =
+                    serde_json::json!([{"path": "answer.txt", "sha256": hash}]);
+            }
+            std::fs::write(&manifest, execution.to_string()).expect("execution manifest");
+        };
+        std::fs::write(root.join("run.log"), "run\n").expect("run log");
+        let artifact_manifest = root.join("artifacts.json");
+        std::fs::write(
+            &artifact_manifest,
+            serde_json::json!({
+                "artifacts": [{"path": "answer.txt", "sha256": hash}]
+            })
+            .to_string(),
+        )
+        .expect("artifact manifest");
+
+        // Declared artifact matches the manifest.
+        write_execution(true);
+        validate_cross_references(root, &manifest, &artifact_manifest)
+            .expect("declared artifact must cross-check");
+
+        // Declared artifact with a wrong hash fails closed.
+        write_execution(false);
+        let mut wrong = serde_json::json!({
+            "execution": {
+                "run_id": "run-1", "session_id": "sess-1", "agent_id": "agent-1",
+                "entrypoint": "python solve.py", "status": "ok", "exit_code": 0,
+                "log_path": "run.log", "cwd": ".",
+                "ran_at_ms": ran_at, "wall_time_ms": 1_000,
+                "artifacts": [{"path": "answer.txt", "sha256": "0".repeat(64)}]
+            }
+        });
+        std::fs::write(&manifest, wrong.to_string()).expect("execution manifest");
+        assert!(
+            validate_cross_references(root, &manifest, &artifact_manifest).is_err(),
+            "mismatched declared hash must fail"
+        );
+
+        // No declared artifacts: the manifest artifact must still be inside the execution
+        // window. A freshly written file is inside the window (ran_at is real wall-clock now
+        // minus a fixed offset, so write the manifest around `now`).
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        let mut fresh = serde_json::json!({
+            "execution": {
+                "run_id": "run-2", "session_id": "sess-2", "agent_id": "agent-2",
+                "entrypoint": "python solve.py", "status": "ok", "exit_code": 0,
+                "log_path": "run.log", "cwd": ".",
+                "ran_at_ms": now, "wall_time_ms": 1_000,
+            }
+        });
+        std::fs::write(&manifest, fresh.to_string()).expect("execution manifest");
+        // File mtime is now (inside the window), so it passes.
+        validate_cross_references(root, &manifest, &artifact_manifest)
+            .expect("in-window artifact passes");
+        // A manifest artifact whose mtime is outside the execution window fails. Move the
+        // execution window two hours into the past so the just-written artifact (mtime=now)
+        // is outside it.
+        let past = now - 2 * 3_600_000;
+        let past_execution = serde_json::json!({
+            "execution": {
+                "run_id": "run-3", "session_id": "sess-3", "agent_id": "agent-3",
+                "entrypoint": "python solve.py", "status": "ok", "exit_code": 0,
+                "log_path": "run.log", "cwd": ".",
+                "ran_at_ms": past, "wall_time_ms": 1_000,
+            }
+        });
+        std::fs::write(&manifest, past_execution.to_string()).expect("past execution manifest");
+        assert!(
+            validate_cross_references(root, &manifest, &artifact_manifest).is_err(),
+            "artifact produced after the execution window must fail"
         );
     }
 

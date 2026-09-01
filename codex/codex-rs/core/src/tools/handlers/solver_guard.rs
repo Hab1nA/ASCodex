@@ -317,6 +317,21 @@ impl SolverGuardSubmitHandler {
                 "reason": "execution record session/agent does not match the live invocation",
             });
         }
+        // Bind the execution record to the artifact manifest: declared artifacts must match
+        // (same path + hash), and undeclared manifests must still fall inside the execution
+        // window. This closes the artifact/execution cross-reference gap.
+        if let Err(err) = codex_solver_guard::validate_cross_references(
+            workspace,
+            Path::new(&args.execution_manifest_path),
+            Path::new(&args.artifact_manifest_path),
+        ) {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": format!("artifact/execution cross-reference validation failed: {err}"),
+            });
+        }
         let redline_findings = match codex_solver_guard::validate_redline_evidence(
             workspace,
             Path::new(&args.trace_path),
@@ -373,6 +388,9 @@ impl SolverGuardSubmitHandler {
             model: &args.model,
             content_sha256: &args.content_sha256,
             now_ms,
+            // Dry-run submissions carry no cloud job; the Bohr gate still applies to the local
+            // smoke bound via the policy when a real cloud job context is later provided.
+            bohr_job: None,
         };
         let ledger_path = match std::env::var("ASCODEX_SOLVER_LEDGER_FILE") {
             Ok(path) if !path.trim().is_empty() => path,
