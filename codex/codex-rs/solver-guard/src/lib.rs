@@ -31,6 +31,9 @@ pub enum Gate {
     Redline,
     Trace,
     Model,
+    /// Cloud-compute discipline gate (BohriumGuard). Local smoke limits, heavy-work migration
+    /// to the cloud, machine allowlist, and per-challenge job budget are enforced here.
+    Bohr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -257,6 +260,10 @@ pub struct Policy {
     pub redline: RedlinePolicy,
     pub trace: TracePolicy,
     pub model: ModelPolicy,
+    /// Cloud-compute discipline (BohriumGuard). `#[serde(default)]` keeps older local policies
+    /// that predate the Bohr gate loadable; an unconfigured policy fails closed on cloud jobs.
+    #[serde(default)]
+    pub bohr: BohrPolicy,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -512,6 +519,101 @@ pub struct ModelPolicy {
     pub model: String,
 }
 
+/// Cloud-compute discipline policy (BohriumGuard). Heavy work must move to the cloud; local
+/// execution is bounded to a short smoke; jobs use an allowlisted machine and a per-challenge
+/// cost budget. An unconfigured policy defaults to denying all outbound cloud jobs while still
+/// enforcing the local smoke bound.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BohrPolicy {
+    #[serde(default = "default_local_smoke_limit_sec")]
+    pub local_smoke_limit_sec: u64,
+    #[serde(default = "default_local_mem_limit_gb")]
+    pub local_mem_limit_gb: u64,
+    #[serde(default = "default_heavy_must_cloud")]
+    pub heavy_must_cloud: bool,
+    #[serde(default)]
+    pub allowed_machines: Vec<String>,
+    #[serde(default = "default_job_timeout_sec")]
+    pub job_timeout_default_sec: u64,
+    #[serde(default)]
+    pub cost_budget_per_challenge: f64,
+}
+
+fn default_local_smoke_limit_sec() -> u64 {
+    120
+}
+
+fn default_local_mem_limit_gb() -> u64 {
+    2
+}
+
+fn default_heavy_must_cloud() -> bool {
+    true
+}
+
+fn default_job_timeout_sec() -> u64 {
+    3600
+}
+
+impl Default for BohrPolicy {
+    fn default() -> Self {
+        Self {
+            local_smoke_limit_sec: default_local_smoke_limit_sec(),
+            local_mem_limit_gb: default_local_mem_limit_gb(),
+            heavy_must_cloud: default_heavy_must_cloud(),
+            allowed_machines: Vec::new(),
+            job_timeout_default_sec: default_job_timeout_sec(),
+            cost_budget_per_challenge: 0.0,
+        }
+    }
+}
+
+impl BohrPolicy {
+    /// Fail-closed decision for a candidate cloud job. An empty machine allowlist rejects every
+    /// job (nothing is approved); an unknown machine, a non-positive timeout, or a budget that
+    /// is not finite and non-negative rejects as well.
+    pub fn admit_job(&self, machine: &str, timeout_sec: u64) -> Result<(), String> {
+        if self.allowed_machines.is_empty() {
+            return Err("no cloud machine is approved (empty allowlist)".to_string());
+        }
+        if machine.trim().is_empty() || !self.allowed_machines.iter().any(|m| m == machine) {
+            return Err(format!("cloud machine {machine:?} is not in the allowlist"));
+        }
+        if timeout_sec == 0 || timeout_sec > self.job_timeout_default_sec {
+            return Err(format!(
+                "job timeout {timeout_sec}s exceeds the approved limit {}s",
+                self.job_timeout_default_sec
+            ));
+        }
+        if !self.cost_budget_per_challenge.is_finite() || self.cost_budget_per_challenge < 0.0 {
+            return Err("per-challenge cost budget must be finite and non-negative".to_string());
+        }
+        Ok(())
+    }
+
+    /// Fail-closed decision for a local run. A run longer than the smoke limit, or over the
+    /// memory limit when `heavy_must_cloud` is enabled, must move to the cloud instead.
+    pub fn admit_local(&self, est_seconds: u64, est_mem_gb: u64) -> Result<(), String> {
+        if self.local_smoke_limit_sec == 0 {
+            return Err("local smoke limit must be positive".to_string());
+        }
+        if est_seconds > self.local_smoke_limit_sec {
+            return Err(format!(
+                "local run is {est_seconds}s, over the {}-second smoke limit; move heavy work to the cloud",
+                self.local_smoke_limit_sec
+            ));
+        }
+        if self.heavy_must_cloud && est_mem_gb > self.local_mem_limit_gb {
+            return Err(format!(
+                "local run needs {est_mem_gb} GiB, over the {}-GiB smoke limit; move heavy work to the cloud",
+                self.local_mem_limit_gb
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AdmissionRequest<'a> {
     pub channel: &'a str,
@@ -527,6 +629,19 @@ pub struct AdmissionRequest<'a> {
     pub model: &'a str,
     pub content_sha256: &'a str,
     pub now_ms: i64,
+    /// Optional cloud-compute (Bohrium) job context. When present, the Bohr gate validates the
+    /// machine against the policy allowlist, the timeout against the job limit, and the
+    /// per-challenge budget. `None` means the request is not a cloud job (pure local submit).
+    pub bohr_job: Option<BohrJobRequest<'a>>,
+}
+
+/// Cloud-compute job context checked by the Bohr gate.
+#[derive(Debug, Clone, Copy)]
+pub struct BohrJobRequest<'a> {
+    pub machine: &'a str,
+    pub timeout_sec: u64,
+    pub est_mem_gb: u64,
+    pub est_cost_usd: f64,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -1548,6 +1663,23 @@ impl Policy {
             .eq_ignore_ascii_case(&actual_hash)
         {
             return Admission::denied(Gate::Channel, "trusted CLI hash does not match policy");
+        }
+        if let Some(job) = request.bohr_job.as_ref() {
+            if !job.est_cost_usd.is_finite()
+                || job.est_cost_usd < 0.0
+                || job.est_cost_usd > self.bohr.cost_budget_per_challenge
+            {
+                return Admission::denied(
+                    Gate::Bohr,
+                    "cloud job cost exceeds the per-challenge budget",
+                );
+            }
+            if let Err(reason) = self.bohr.admit_job(job.machine, job.timeout_sec) {
+                return Admission::denied(Gate::Bohr, reason);
+            }
+            if let Err(reason) = self.bohr.admit_local(0, job.est_mem_gb) {
+                return Admission::denied(Gate::Bohr, reason);
+            }
         }
         Admission::allow()
     }
@@ -5351,6 +5483,27 @@ pub fn collect_wake_files(wakes_dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(files)
 }
 
+/// Mark a consumed Chief wake file so a resident supervisor never re-reads it.
+///
+/// The file is renamed in place to `<name>.json.consumed` (for example `chief-abc.json` ->
+/// `chief-abc.json.consumed`). `collect_wake_files` only matches `*.json`, so the consumed
+/// file is skipped on the next cycle while the evidence stays on disk for audit. A non-`.json`
+/// path or a missing file fails closed (fail-stop) rather than being silently treated as
+/// consumed.
+pub fn mark_wake_file_consumed(path: &Path) -> Result<PathBuf, String> {
+    if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+        return Err(format!("wake file {} is not a .json file", path.display()));
+    }
+    let consumed = path.with_extension("json.consumed");
+    std::fs::rename(path, &consumed).map_err(|error| {
+        format!(
+            "cannot mark wake file {} as consumed: {error}",
+            path.display()
+        )
+    })?;
+    Ok(consumed)
+}
+
 /// Run one canary turn: derive an isolated child thread that echoes the nonce, then read back
 /// its real terminal message. The runner verifies the nonce appears in the child's output
 /// rather than trusting a lifecycle status alone. A panicking child, empty output, or timeout
@@ -6091,6 +6244,28 @@ mod tests {
         assert_eq!(names, vec!["chief-a.json", "chief-b.json"]);
         // Missing directory fails closed.
         assert!(collect_wake_files(&dir.path().join("missing")).is_err());
+    }
+
+    #[test]
+    fn mark_wake_file_consumed_hides_file_from_next_collect() {
+        let dir = tempdir().expect("tempdir");
+        let wakes = dir.path().join("wakes");
+        std::fs::create_dir_all(&wakes).expect("wakes dir");
+        let wake = wakes.join("chief-a.json");
+        std::fs::write(&wake, "{}").expect("wake");
+        let consumed = mark_wake_file_consumed(&wake).expect("mark consumed");
+        assert_eq!(
+            consumed.file_name().unwrap().to_string_lossy(),
+            "chief-a.json.consumed"
+        );
+        assert!(!wake.exists(), "original file must be moved aside");
+        assert!(consumed.exists(), "consumed evidence stays on disk");
+        // The next collection pass no longer sees the consumed file, so a resident
+        // supervisor converges instead of re-reading it with a fresh timestamp.
+        assert!(collect_wake_files(&wakes).expect("collect").is_empty());
+        // Non-json and missing files fail closed.
+        assert!(mark_wake_file_consumed(&wake).is_err());
+        assert!(mark_wake_file_consumed(&consumed).is_err());
     }
 
     #[test]
@@ -7124,6 +7299,7 @@ mod tests {
             model: "gpt-test",
             content_sha256: "content-a",
             now_ms: 100_000,
+            bohr_job: None,
         };
         assert!(!policy.admit(&request).allowed);
     }
@@ -7169,6 +7345,7 @@ mod tests {
                 provider: "provider".to_string(),
                 model: "model".to_string(),
             },
+            bohr: BohrPolicy::default(),
         };
         let request = AdmissionRequest {
             channel: "harbor",
@@ -7188,6 +7365,7 @@ mod tests {
             model: "model",
             content_sha256: "content",
             now_ms: 1,
+            bohr_job: None,
         };
         assert!(policy.admit(&request).allowed);
         let outside = dir.path().join("outside.exe");
@@ -7262,6 +7440,7 @@ model:
             model: "model",
             content_sha256: "content-a",
             now_ms: 100,
+            bohr_job: None,
         };
         let admission = policy.admit(&request);
         assert!(admission.allowed, "failures: {:?}", admission.failures);
@@ -7277,6 +7456,126 @@ model:
             ..request
         };
         assert!(!policy.admit(&wrong_class).allowed);
+    }
+
+    #[test]
+    fn bohr_gate_rejects_unknown_machine_and_over_budget_job() {
+        let dir = tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+        let cli = workspace.join("bohr.exe");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        std::fs::write(&cli, b"trusted").expect("cli");
+        let yaml = format!(
+            r#"
+channel:
+  harbor_only: true
+  workspace_root: {}
+  trusted_cli_sha256: {}
+identity:
+  name: id-a
+  challenge_id: challenge-a
+  owner: owner-a
+cadence:
+  min_interval_seconds: 0
+  max_estimated_cost_usd: 10.0
+redline:
+  clean: true
+trace:
+  real_execution: true
+  paired_tool_events: true
+  artifact_provenance: true
+model:
+  provider: provider
+  model: model
+bohr:
+  local_smoke_limit_sec: 120
+  local_mem_limit_gb: 2
+  heavy_must_cloud: true
+  allowed_machines: [c32_m128_cpu]
+  job_timeout_default_sec: 3600
+  cost_budget_per_challenge: 5.0
+"#,
+            workspace.display(),
+            sha256_file(&cli).expect("hash"),
+        );
+        let policy = Policy::from_yaml(&yaml).expect("policy parses");
+        fn request<'a>(
+            cli: &'a std::path::Path,
+            workspace: &'a std::path::Path,
+            machine: &'a str,
+            cost: f64,
+            mem: u64,
+        ) -> AdmissionRequest<'a> {
+            AdmissionRequest {
+                channel: "harbor",
+                identity: "id-a",
+                identity_class: "solver-primary",
+                challenge_id: "challenge-a",
+                owner: "owner-a",
+                cli_path: cli,
+                workspace,
+                estimated_cost_usd: 0.1,
+                trace: TraceEvidence {
+                    real_execution: true,
+                    paired_tool_events: true,
+                    artifact_provenance: true,
+                },
+                provider: "provider",
+                model: "model",
+                content_sha256: "content",
+                now_ms: 100,
+                bohr_job: Some(BohrJobRequest {
+                    machine,
+                    timeout_sec: 600,
+                    est_mem_gb: mem,
+                    est_cost_usd: cost,
+                }),
+            }
+        }
+        // Approved machine within budget passes.
+        assert!(
+            policy
+                .admit(&request(&cli, &workspace, "c32_m128_cpu", 1.0, 1))
+                .allowed,
+            "approved machine within budget must pass"
+        );
+        // Unknown machine fails closed on the Bohr gate.
+        assert!(
+            !policy
+                .admit(&request(&cli, &workspace, "c256_m512_gpu", 1.0, 1))
+                .allowed,
+            "unknown machine must be rejected"
+        );
+        // Cost over budget fails closed.
+        assert!(
+            !policy
+                .admit(&request(&cli, &workspace, "c32_m128_cpu", 9.0, 1))
+                .allowed,
+            "cost over the per-challenge budget must be rejected"
+        );
+        // Memory over the local smoke bound while heavy_must_cloud fails closed.
+        assert!(
+            !policy
+                .admit(&request(&cli, &workspace, "c32_m128_cpu", 1.0, 8))
+                .allowed,
+            "over-memory local run must move to the cloud or be rejected"
+        );
+    }
+
+    #[test]
+    fn bohr_admit_local_and_job_fail_closed_on_empty_allowlist() {
+        let policy = BohrPolicy::default();
+        // Empty machine allowlist rejects every cloud job.
+        assert!(policy.admit_job("c32_m128_cpu", 600).is_err());
+        // Local smoke limits are enforced.
+        assert!(policy.admit_local(10, 1).is_ok());
+        assert!(policy.admit_local(121, 1).is_err());
+        assert!(policy.admit_local(10, 3).is_err());
+        // Timeout over the approved limit fails closed.
+        let mut with_machine = policy.clone();
+        with_machine.allowed_machines = vec!["c32_m128_cpu".to_string()];
+        assert!(with_machine.admit_job("c32_m128_cpu", 600).is_ok());
+        assert!(with_machine.admit_job("c32_m128_cpu", 3601).is_err());
     }
 
     #[test]
@@ -8210,6 +8509,7 @@ model:
             model: "model",
             content_sha256: "content",
             now_ms,
+            bohr_job: None,
         }
     }
 
@@ -8964,6 +9264,7 @@ model:
             model: "gpt-test",
             content_sha256: "content-a",
             now_ms: 100_000,
+            bohr_job: None,
         };
         assert!(matches!(
             broker.prepare(&request, "r1", 10.0).await,

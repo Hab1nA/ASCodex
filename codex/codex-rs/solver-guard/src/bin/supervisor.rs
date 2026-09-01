@@ -1,4 +1,6 @@
-use codex_solver_guard::{CoordinationEventRecord, Ledger, collect_wake_files, next_backoff_ms};
+use codex_solver_guard::{
+    CoordinationEventRecord, Ledger, collect_wake_files, mark_wake_file_consumed, next_backoff_ms,
+};
 use serde_json::json;
 use std::env;
 use std::fs;
@@ -139,6 +141,10 @@ async fn consume_once(
         ledger
             .consume_chief_wake_file(&wake_json, campaign_id, now_ms, &events)
             .await
+            .map_err(|error| format!("wake consumer failed on {}: {error}", path.display()))?;
+        // Move the consumed file aside so the next cycle never re-reads it with a fresh
+        // timestamp and trips the idempotency guard; the resident loop can then converge.
+        mark_wake_file_consumed(&path)
             .map_err(|error| format!("wake consumer failed on {}: {error}", path.display()))?;
         consumed += 1;
     }

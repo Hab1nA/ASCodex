@@ -1,4 +1,4 @@
-use codex_solver_guard::{CoordinationEventRecord, Ledger};
+use codex_solver_guard::{CoordinationEventRecord, Ledger, mark_wake_file_consumed};
 use serde_json::json;
 use std::env;
 use std::fs;
@@ -98,6 +98,10 @@ async fn run() -> Result<(), String> {
         ledger
             .consume_chief_wake_file(&wake_json, &campaign_id, now_ms, &events)
             .await
+            .map_err(|error| format!("wake consumer failed on {}: {error}", path.display()))?;
+        // Move the consumed file aside so a later pass (or the resident supervisor) never
+        // re-reads it with a fresh timestamp and trips the idempotency guard.
+        mark_wake_file_consumed(&path)
             .map_err(|error| format!("wake consumer failed on {}: {error}", path.display()))?;
         consumed += 1;
     }

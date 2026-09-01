@@ -6,6 +6,12 @@
 **/.env
 **/.env.*
 config/*local*
+.codex/config.toml
+
+# Local E2E artifacts and tooling state (never deliverables)
+out/
+private/
+.v2c/
 
 # Large/generated challenge artifacts
 _logs/
