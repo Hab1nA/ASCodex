@@ -347,8 +347,18 @@ impl ModelProvider for ConfiguredModelProvider {
             RemoteCompactionSupport::Unsupported
         };
 
+        // Only first-party OpenAI/Responses-compatible providers advertise namespace tools and
+        // the native `web_search` tool by default. Generic OpenAI-compatible gateways (e.g. a
+        // proxy in front of the Responses API) commonly reject the `namespace` and `web_search`
+        // tool types with a 400, so a custom provider must not expose them unless it is
+        // explicitly known to support them.
+        let first_party = self.info.is_openai()
+            || is_azure_responses_provider(&self.info.name, self.info.base_url.as_deref());
+
         ProviderCapabilities {
             remote_compaction,
+            namespace_tools: first_party,
+            web_search: first_party,
             ..ProviderCapabilities::default()
         }
     }
