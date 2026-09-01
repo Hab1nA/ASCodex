@@ -22,7 +22,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 EXPECTED_ANCHOR = (
-    "769f138d63fa14ab907595f66142da266c8741e9ad1dc9a2eae2f4cf924cdf8e"
+    "8d6e0ba83e7c45e247f5d93f6ce39c09b2f6fa95a8b9e851ed7c55f2c3d5a695"
 )
 
 

@@ -8,6 +8,21 @@
 config/*local*
 .codex/config.toml
 
+# Codex runtime state (sessions, sqlite, logs, skills cache) — never deliverables
+.codex/*.sqlite
+.codex/*.sqlite-*
+.codex/installation_id
+.codex/logs_2.sqlite*
+.codex/state_5.sqlite*
+.codex/queue_1.sqlite*
+.codex/thread_history_1.sqlite*
+.codex/goals_1.sqlite*
+.codex/memories_1.sqlite*
+.codex/thread-writer-locks/
+.codex/.sandbox_migration
+.codex/.tmp/
+.codex/skills/
+
 # Local E2E artifacts and tooling state (never deliverables)
 out/
 private/

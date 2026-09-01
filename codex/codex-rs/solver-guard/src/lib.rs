@@ -5762,7 +5762,7 @@ pub fn build_recovery_canary_trace(
 /// private key out-of-band; the private key must never be committed, printed, or stored in the
 /// workspace. This is a placeholder key for local dry-run; production must rotate it.
 pub const ASCODEX_TRUST_ANCHOR_PUBLIC_KEY_HEX: &str =
-    "769f138d63fa14ab907595f66142da266c8741e9ad1dc9a2eae2f4cf924cdf8e";
+    "8d6e0ba83e7c45e247f5d93f6ce39c09b2f6fa95a8b9e851ed7c55f2c3d5a695";
 
 /// Verify an Ed25519 signature (hex-encoded, 64 bytes) over `data` against the trust anchor.
 /// Malformed hex, wrong lengths, and empty data fail closed.
