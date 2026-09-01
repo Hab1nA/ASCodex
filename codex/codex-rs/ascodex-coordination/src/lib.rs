@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use thiserror::Error;
 
+mod auto_push;
 mod contract;
 mod reconciliation;
 mod recovery_canary;
@@ -15,6 +16,7 @@ mod research_cycle;
 mod stage_brief;
 mod workspace_acl;
 
+pub use auto_push::*;
 pub use contract::*;
 pub use reconciliation::*;
 pub use recovery_canary::*;
