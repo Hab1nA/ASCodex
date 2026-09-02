@@ -11,7 +11,6 @@ If the StageBrief, challenge binding, evidence, or requested permission is missi
 """
 
 [features]
-shell_tool = false
 apps = false
 plugins = false
 memory_tool = false

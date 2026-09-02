@@ -1535,7 +1535,14 @@ fn validate_trace_steps(steps: &[JsonValue], run_log: &str) -> Result<(), TraceV
                 }
                 let id = required_string(step, "tool_call_id", index)?;
                 let body = required_string(step, "body", index)?;
-                if body.trim().chars().count() >= 16 && run_log.contains(body) {
+                // Anchor on the run log with newline normalization: a real
+                // PowerShell/cmd redirect writes CRLF while an agent-generated
+                // trace typically uses LF. Exact byte matching would reject
+                // genuine stdout, so compare both sides as LF.
+                let normalized_run_log = run_log.replace("\r\n", "\n");
+                if body.trim().chars().count() >= 16
+                    && normalized_run_log.contains(&body.replace("\r\n", "\n"))
+                {
                     stdout_anchored = true;
                 }
                 *results.entry(id.to_string()).or_default() += 1;

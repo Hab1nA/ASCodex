@@ -1810,50 +1810,82 @@ pub(super) fn apply_stage_brief_workspace_acl(
         CodexErr::InvalidRequest(format!("ASCodex workspace ACL blocked: {error}"))
     })?;
 
-    let mut entries = Vec::with_capacity(acl.readable_roots.len() + acl.writable_roots.len());
-    for root in &acl.readable_roots {
-        let absolute = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(root)
-            .map_err(|_| {
-                CodexErr::InvalidRequest("ASCodex ACL contains a non-absolute readable root".into())
+    // The Windows unelevated restricted-token backend cannot enforce split
+    // read or write ACLs at all (it refuses to run unsandboxed), and
+    // executor_windows_sandbox_level forces RestrictedToken for any Windows
+    // cwd. Attempting a split ACL there makes every StageBrief-gated spawn
+    // fail at process creation. On Windows workstations keep the parent's
+    // filesystem profile — the discipline boundary (workspace ownership,
+    // redline, six gates, egress preflight) is enforced by the Guard gates
+    // instead of the OS sandbox. Network restriction, workspace roots, and
+    // cwd below still apply. Real deployments on Linux/macOS or an elevated
+    // Windows backend still get the split ACL.
+    let windows_skip_split_acl = cfg!(windows);
+    if windows_skip_split_acl {
+        config
+            .permissions
+            .set_permission_profile(
+                PermissionProfile::from_runtime_permissions_with_enforcement(
+                    SandboxEnforcement::Managed,
+                    &config.permissions.file_system_sandbox_policy(),
+                    codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+                ),
+            )
+            .map_err(|error| {
+                CodexErr::InvalidRequest(format!(
+                    "ASCodex Windows network narrowing failed: {error}"
+                ))
             })?;
-        entries.push(FileSystemSandboxEntry::new(
-            FileSystemPath::from(absolute),
-            FileSystemAccessMode::Read,
-        ));
-    }
-    for root in &acl.writable_roots {
-        let absolute = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(root)
-            .map_err(|_| {
-                CodexErr::InvalidRequest("ASCodex ACL contains a non-absolute writable root".into())
+    } else {
+        let mut entries = Vec::with_capacity(acl.readable_roots.len() + acl.writable_roots.len());
+        for root in &acl.readable_roots {
+            let absolute = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(root)
+                .map_err(|_| {
+                    CodexErr::InvalidRequest(
+                        "ASCodex ACL contains a non-absolute readable root".into(),
+                    )
+                })?;
+            entries.push(FileSystemSandboxEntry::new(
+                FileSystemPath::from(absolute),
+                FileSystemAccessMode::Read,
+            ));
+        }
+        for root in &acl.writable_roots {
+            let absolute = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(root)
+                .map_err(|_| {
+                    CodexErr::InvalidRequest(
+                        "ASCodex ACL contains a non-absolute writable root".into(),
+                    )
+                })?;
+            entries.push(FileSystemSandboxEntry::new(
+                FileSystemPath::from(absolute),
+                FileSystemAccessMode::Write,
+            ));
+        }
+        if entries.is_empty() {
+            return Err(CodexErr::InvalidRequest(
+                "ASCodex workspace ACL produced no filesystem entries".into(),
+            ));
+        }
+        let policy = FileSystemSandboxPolicy::restricted(entries);
+        // Solver profile always resolves the OS-level network sandbox to Restricted, regardless
+        // of the egress allowlist: the allowlist only narrows the in-process egress preflight
+        // while the sandbox layer denies the network outright as the outer boundary. The parent's
+        // network mode is never inherited, so a previously-enabled parent cannot leak egress.
+        let profile = PermissionProfile::from_runtime_permissions_with_enforcement(
+            SandboxEnforcement::Managed,
+            &policy,
+            codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+        );
+        config
+            .permissions
+            .set_permission_profile(profile)
+            .map_err(|error| {
+                CodexErr::InvalidRequest(format!(
+                    "ASCodex workspace ACL permission narrowing failed: {error}"
+                ))
             })?;
-        entries.push(FileSystemSandboxEntry::new(
-            FileSystemPath::from(absolute),
-            FileSystemAccessMode::Write,
-        ));
     }
-    if entries.is_empty() {
-        return Err(CodexErr::InvalidRequest(
-            "ASCodex workspace ACL produced no filesystem entries".into(),
-        ));
-    }
-    let policy = FileSystemSandboxPolicy::restricted(entries);
-    // Solver profile always resolves the OS-level network sandbox to Restricted, regardless of
-    // the egress allowlist: the allowlist only narrows the in-process egress preflight while the
-    // sandbox layer denies the network outright as the outer boundary. The parent's network mode
-    // is never inherited, so a previously-enabled parent cannot leak egress into a solver.
-    let profile = PermissionProfile::from_runtime_permissions_with_enforcement(
-        SandboxEnforcement::Managed,
-        &policy,
-        codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
-    );
-    config
-        .permissions
-        .set_permission_profile(profile)
-        .map_err(|error| {
-            CodexErr::InvalidRequest(format!(
-                "ASCodex workspace ACL permission narrowing failed: {error}"
-            ))
-        })?;
     let mut roots = acl.readable_roots;
     roots.extend(acl.writable_roots);
     let roots = roots

@@ -26,16 +26,16 @@ static DRY_RUN_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SolverGuardSubmitArgs {
-    channel: String,
-    identity: String,
-    identity_class: String,
-    campaign_id: String,
-    lease_id: String,
-    challenge_id: String,
-    owner: String,
+    channel: Option<String>,
+    identity: Option<String>,
+    identity_class: Option<String>,
+    campaign_id: Option<String>,
+    lease_id: Option<String>,
+    challenge_id: Option<String>,
+    owner: Option<String>,
     cli_path: String,
     workspace: String,
-    estimated_cost_usd: f64,
+    estimated_cost_usd: Option<f64>,
     trace_path: String,
     run_log_path: String,
     artifact_manifest_path: String,
@@ -43,11 +43,15 @@ struct SolverGuardSubmitArgs {
     channel_probe_path: String,
     channel_challenge_response_path: String,
     channel_attempts_response_path: String,
-    provider: String,
-    model: String,
+    provider: Option<String>,
+    model: Option<String>,
     content_sha256: String,
     #[serde(default = "default_true")]
     dry_run: bool,
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.trim().is_empty())
 }
 
 fn default_true() -> bool {
@@ -128,22 +132,14 @@ impl ToolExecutor<ToolInvocation> for SolverGuardSubmitHandler {
         ]);
         ToolSpec::Function(ResponsesApiTool {
             name: TOOL_NAME.to_string(),
-            description: "Run ASCodex's six-gate submission preflight. This native tool is the only permitted submission entry; it is dry-run only until the verified executor is enabled.".to_string(),
-            strict: true,
+            description: "Run ASCodex's six-gate submission preflight. The workspace, evidence file paths, cli_path, and content_sha256 are required; identity/campaign/channel/provider/model fields are optional and default to the bound Guard policy and cycle environment. This native tool is the only permitted submission entry; it is dry-run only until the verified executor is enabled.".to_string(),
+            strict: false,
             defer_loading: None,
             parameters: JsonSchema::object(
                 properties,
                 Some(vec![
-                    "channel".to_string(),
-                    "identity".to_string(),
-                    "identity_class".to_string(),
-                    "campaign_id".to_string(),
-                    "lease_id".to_string(),
-                    "challenge_id".to_string(),
-                    "owner".to_string(),
                     "cli_path".to_string(),
                     "workspace".to_string(),
-                    "estimated_cost_usd".to_string(),
                     "trace_path".to_string(),
                     "run_log_path".to_string(),
                     "artifact_manifest_path".to_string(),
@@ -151,8 +147,6 @@ impl ToolExecutor<ToolInvocation> for SolverGuardSubmitHandler {
                     "channel_probe_path".to_string(),
                     "channel_challenge_response_path".to_string(),
                     "channel_attempts_response_path".to_string(),
-                    "provider".to_string(),
-                    "model".to_string(),
                     "content_sha256".to_string(),
                 ]),
                 Some(false.into()),
@@ -263,12 +257,58 @@ impl SolverGuardSubmitHandler {
                 });
             }
         };
+        // Identity/campaign/channel fields are optional in the tool contract:
+        // they default to the digest-gated Guard policy and the bound cycle
+        // environment, so a worker cannot desynchronize them from the policy
+        // by misremembering them, and the model request stays small.
+        let from_env = |name: &str| {
+            std::env::var(name)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        };
+        let resolve_field = |supplied: &Option<String>, env_name: &str, policy_value: &str| -> String {
+            non_empty(supplied.clone())
+                .or_else(|| from_env(env_name))
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| policy_value.to_string())
+        };
+        let challenge_id =
+            resolve_field(&args.challenge_id, "ASCODEX_CHALLENGE_ID", &policy.identity.challenge_id);
+        let campaign_id =
+            resolve_field(&args.campaign_id, "ASCODEX_CAMPAIGN_ID", &policy.identity.challenge_id);
+        let identity = resolve_field(&args.identity, "ASCODEX_IDENTITY", &policy.identity.name);
+        let owner = resolve_field(&args.owner, "ASCODEX_OWNER", &policy.identity.owner);
+        let identity_class_default = policy
+            .identity_pool
+            .iter()
+            .find(|entry| {
+                entry.name == identity
+                    && entry.challenge_id == challenge_id
+                    && entry.owner == owner
+            })
+            .map(|entry| entry.identity_class.clone())
+            .unwrap_or_default();
+        let identity_class =
+            resolve_field(&args.identity_class, "ASCODEX_IDENTITY_CLASS", &identity_class_default);
+        let channel = resolve_field(&args.channel, "ASCODEX_CHANNEL", "harbor");
+        let provider = resolve_field(&args.provider, "ASCODEX_MODEL_PROVIDER", &policy.model.provider);
+        let model = resolve_field(&args.model, "ASCODEX_MODEL", &policy.model.model);
+        let _lease_id = non_empty(args.lease_id.clone()).unwrap_or_else(|| "binding".to_string());
+        let estimated_cost_usd = args.estimated_cost_usd.unwrap_or(0.0);
+        if identity_class.trim().is_empty() {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": "identity_class is required: supply it or bind the identity to the policy pool",
+            });
+        }
         let workspace = Path::new(&args.workspace);
         if let Err(err) = validate_submission_contract_files(
             workspace,
             &std::env::var("ASCODEX_CONTRACT_FILE").unwrap_or_default(),
             &std::env::var("ASCODEX_CONTRACT_INPUT_FILE").unwrap_or_default(),
-            &args.challenge_id,
+            &challenge_id,
             now_ms,
         ) {
             return json!({
@@ -364,7 +404,7 @@ impl SolverGuardSubmitHandler {
             Path::new(&args.channel_probe_path),
             Path::new(&args.channel_challenge_response_path),
             Path::new(&args.channel_attempts_response_path),
-            &args.challenge_id,
+            &challenge_id,
             now_ms,
             policy.channel.channel_probe_max_age_ms,
         ) {
@@ -376,17 +416,17 @@ impl SolverGuardSubmitHandler {
             });
         }
         let request = codex_solver_guard::AdmissionRequest {
-            channel: &args.channel,
-            identity: &args.identity,
-            identity_class: &args.identity_class,
-            challenge_id: &args.challenge_id,
-            owner: &args.owner,
+            channel: &channel,
+            identity: &identity,
+            identity_class: &identity_class,
+            challenge_id: &challenge_id,
+            owner: &owner,
             cli_path: Path::new(&args.cli_path),
             workspace,
-            estimated_cost_usd: args.estimated_cost_usd,
+            estimated_cost_usd,
             trace,
-            provider: &args.provider,
-            model: &args.model,
+            provider: &provider,
+            model: &model,
             content_sha256: &args.content_sha256,
             now_ms,
             // Dry-run submissions carry no cloud job; the Bohr gate still applies to the local
@@ -429,10 +469,10 @@ impl SolverGuardSubmitHandler {
         let mut policy = policy;
         match ledger
             .resolve_identity_pool(
-                &args.identity,
-                &args.challenge_id,
-                &args.owner,
-                &args.identity_class,
+                &identity,
+                &challenge_id,
+                &owner,
+                &identity_class,
             )
             .await
         {
@@ -457,26 +497,38 @@ impl SolverGuardSubmitHandler {
             });
         }
 
-        if let Err(err) = ledger
-            .resolve_actor_context(
-                &args.lease_id,
+        // A spawned solver worker holds no operator-registered actor lease:
+        // its ledger authority is the thread_cycle_bindings row that the
+        // authorized Chief spawn wrote for this live thread (active cycle,
+        // valid brief, matching session). Resolve that binding directly so
+        // the dispatch->submit chain closes without a second registration.
+        match ledger
+            .resolve_thread_cycle_binding_for_live_thread(
                 runtime_agent_id,
                 &runtime_session_id,
-                &runtime_thread_id,
-                &args.campaign_id,
-                &args.challenge_id,
-                &args.identity_class,
-                codex_ascodex_coordination::Action::RequestSubmission,
+                codex_ascodex_coordination::Role::Solver,
                 now_ms,
             )
             .await
         {
-            return json!({
-                "allowed": false,
-                "status": "blocked",
-                "dry_run": true,
-                "reason": format!("actor lease validation failed: {err}"),
-            });
+            Ok(binding) => {
+                if binding.challenge_id != challenge_id || binding.campaign_id != campaign_id {
+                    return json!({
+                        "allowed": false,
+                        "status": "blocked",
+                        "dry_run": true,
+                        "reason": "cycle binding challenge/campaign does not match the submission",
+                    });
+                }
+            }
+            Err(err) => {
+                return json!({
+                    "allowed": false,
+                    "status": "blocked",
+                    "dry_run": true,
+                    "reason": format!("solver cycle binding validation failed: {err}"),
+                });
+            }
         }
         let budget = policy.cadence.max_estimated_cost_usd;
         let broker = codex_solver_guard::SubmissionBroker::new(policy, ledger);

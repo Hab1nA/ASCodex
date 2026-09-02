@@ -80,6 +80,9 @@ use codex_protocol::auth::AuthMode;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::config_types::Verbosity as VerbosityConfig;
+use codex_protocol::models::AgentMessageInputContent;
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::FunctionCallOutputBody;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
@@ -946,6 +949,77 @@ impl ModelClient {
                 } = item
                 {
                     *encrypted_function_args = None;
+                }
+                // OpenAI-compatible proxies usually implement a stricter legacy
+                // subset of the Responses input schema (observed on agnes):
+                // replayed function_call items must carry an id, the
+                // function_call_output body must be a plain text string, and
+                // reasoning summaries must be empty. Normalize to that shape so
+                // follow-up requests after a tool call are accepted instead of
+                // failing deserialization.
+                match item {
+                    ResponseItem::FunctionCall { id, call_id, .. } => {
+                        if id.is_none() {
+                            let seed = Uuid::new_v5(&Uuid::NAMESPACE_OID, call_id.as_bytes());
+                            *id = Some(ResponseItemId::with_suffix("fc", seed));
+                        }
+                    }
+                    ResponseItem::FunctionCallOutput {
+                        id,
+                        call_id,
+                        output,
+                        ..
+                    } => {
+                        if matches!(output.body, FunctionCallOutputBody::ContentItems(_)) {
+                            output.body =
+                                FunctionCallOutputBody::Text(output.body.to_text().unwrap_or_default());
+                        }
+                        if id.is_none() {
+                            let seed = Uuid::new_v5(
+                                &Uuid::NAMESPACE_OID,
+                                call_id.as_deref().unwrap_or_default().as_bytes(),
+                            );
+                            *id = Some(ResponseItemId::with_suffix("fco", seed));
+                        }
+                    }
+                    ResponseItem::Reasoning { summary, .. } => {
+                        summary.clear();
+                    }
+                    ResponseItem::AgentMessage {
+                        id,
+                        author,
+                        recipient,
+                        content,
+                        ..
+                    } => {
+                        // Inter-agent messages are a Codex-local input type;
+                        // OpenAI-compatible proxies reject the `agent_message`
+                        // variant. Replay them as plain user text. Inter-agent
+                        // payloads are stored in `encrypted_content` (opaque
+                        // to intermediate models) but must reach the
+                        // recipient model, so render those parts as well.
+                        let text = content
+                            .iter()
+                            .filter_map(|part| match part {
+                                AgentMessageInputContent::InputText { text } => {
+                                    Some(text.as_str())
+                                }
+                                AgentMessageInputContent::EncryptedContent {
+                                    encrypted_content,
+                                } => Some(encrypted_content.as_str()),
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        let framed = format!("[agent message from {author} to {recipient}]\n{text}");
+                        *item = ResponseItem::Message {
+                            id: id.take(),
+                            role: "user".to_string(),
+                            content: vec![ContentItem::InputText { text: framed }],
+                            phase: None,
+                            internal_chat_message_metadata_passthrough: None,
+                        };
+                    }
+                    _ => {}
                 }
             }
         }

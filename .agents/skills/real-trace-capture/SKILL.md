@@ -27,37 +27,48 @@ description: Capture a Bohrium Playground trace from genuine Codex execution rec
 2. 记录每步的 command + stdout + stderr
 3. 从这次实际执行的记录转录 trace.jsonl，每步包含真实输出；禁止回填虚构的时间、cost 或 token
 
-## trace.jsonl 格式（每行一个 JSON）
+## trace.jsonl 格式（每行一个 JSON，ASCGuard 门控 schema）
+
+每行必须包含：`step_order`（从 1 连续递增，不可跳过/重复）、`step_id`（唯一）、
+`step_type`、`timestamp`（RFC3339，非递减）、`duration_s`（非负）、`cost_usd`（非负）、
+`tokens`（非负）。`tool_call` 行额外含 `tool_name` 与 `tool_args`；`tool_result`
+必须紧随其 `tool_call`，含同 `tool_call_id` 与 `body`（真实 stdout）。
 
 ```json
-{"step_id":"s01","step_type":"thought","body":"读题面...","timestamp":"2026-08-17T11:30:00Z","cost_usd":0.0,"tokens":0}
-{"step_id":"s02","step_type":"tool_call","name":"pwsh","arguments":{"command":"python solve.py"},"tool_call_id":"tc02","timestamp":"2026-08-17T11:30:05Z","cost_usd":0.0,"tokens":0}
-{"step_id":"s03","step_type":"tool_result","tool_call_id":"tc02","body":"[真实 stdout 完整输出]","timestamp":"2026-08-17T11:30:15Z"}
-{"step_id":"s04","step_type":"thought","body":"分析输出结果...","timestamp":"2026-08-17T11:30:20Z","cost_usd":0.0,"tokens":0}
-{"step_id":"s05","step_type":"tool_call","name":"pwsh","arguments":{"command":"cat outputs/answer.json"},"tool_call_id":"tc05","timestamp":"2026-08-17T11:30:25Z","cost_usd":0.0,"tokens":0}
-{"step_id":"s06","step_type":"tool_result","tool_call_id":"tc05","body":"[真实文件内容]","timestamp":"2026-08-17T11:30:26Z"}
-{"step_id":"s07","step_type":"artifact","body":"sha256:abc123...","timestamp":"2026-08-17T11:30:30Z","cost_usd":0.0,"tokens":0}
-{"step_id":"s08","step_type":"decision","body":"提交答案","timestamp":"2026-08-17T11:30:35Z","cost_usd":0.01,"tokens":0}
+{"step_order":1,"step_id":"s01","step_type":"thought","body":"读题面...（≥80字符）","timestamp":"2026-08-17T11:30:00Z","duration_s":1.2,"cost_usd":0.0,"tokens":0}
+{"step_order":2,"step_id":"s02","step_type":"tool_call","tool_name":"pwsh","tool_args":{"command":"python solve.py"},"tool_call_id":"tc02","timestamp":"2026-08-17T11:30:05Z","duration_s":0.1,"cost_usd":0.0,"tokens":0}
+{"step_order":3,"step_id":"s03","step_type":"tool_result","tool_call_id":"tc02","body":"[真实 stdout 完整输出]","timestamp":"2026-08-17T11:30:15Z","duration_s":10.0,"cost_usd":0.0,"tokens":0}
+{"step_order":4,"step_id":"s04","step_type":"thought","body":"分析输出结果...（≥80字符）","timestamp":"2026-08-17T11:30:20Z","duration_s":1.1,"cost_usd":0.0,"tokens":0}
+{"step_order":5,"step_id":"s05","step_type":"tool_call","tool_name":"pwsh","tool_args":{"command":"cat outputs/answer.json"},"tool_call_id":"tc05","timestamp":"2026-08-17T11:30:25Z","duration_s":0.1,"cost_usd":0.0,"tokens":0}
+{"step_order":6,"step_id":"s06","step_type":"tool_result","tool_call_id":"tc05","body":"[真实文件内容]","timestamp":"2026-08-17T11:30:26Z","duration_s":1.0,"cost_usd":0.0,"tokens":0}
+{"step_order":7,"step_id":"s07","step_type":"artifact","artifact_path":"outputs/answer.json","body":"sha256:abc123...","timestamp":"2026-08-17T11:30:30Z","duration_s":0.2,"cost_usd":0.0,"tokens":0}
+{"step_order":8,"step_id":"s08","step_type":"decision","body":"提交答案","timestamp":"2026-08-17T11:30:35Z","duration_s":0.2,"cost_usd":0.01,"tokens":0}
 ```
 
 ## 铁律（违反 = trace_quality=0）
 
 1. **tool_result.body 必须是真实 stdout** — 不能是编造的
-2. **tool_call/tool_result 必须 1:1 配对** — tool_call_id 一致
-3. **无论文引用** — 作者名/年份/方程号/文献值全删
-4. **首条 thought 不写结论** — 防 "answer appears pre-loaded"
-5. **≥3 条 thought** — body ≥80 字符
-6. **cost_usd ≥0.01** — 至少一步有非零 cost
-7. **timestamp 非递减** — 按时间顺序
-8. **step_id 唯一** — 不能重复
+2. **tool_call/tool_result 必须 1:1 配对** — tool_call_id 一致，tool_result 紧跟其 tool_call
+3. **step_order 从 1 连续** — 不可跳过、重复、从非 1 开始
+4. **无论文引用** — 作者名/年份/方程号/文献值全删
+5. **首条 thought 不写结论** — 防 "answer appears pre-loaded"
+6. **≥3 条 thought** — body ≥80 字符
+7. **cost_usd 总和 ≥0.01** — 至少一步有非零 cost
+8. **timestamp 非递减** — 按时间顺序
+9. **step_id 唯一** — 不能重复
+10. **tool_result.body 须锚定真实 stdout** — 至少一条 ≥16 字符的 tool_result body 必须能在 run.log 原文中找到
 
 ## 提交前校验清单
 
 1. `grep -E "(Maliar|Paper \[|Table |Equation \(|et al\.)" trace.jsonl` → 应为空
 2. 检查所有 step_type ∈ {thought, tool_call, tool_result, artifact, decision, error, observation}
-3. 检查 tool_call 和 tool_result 的 tool_call_id 集合一致
-4. 检查 ≥3 条 thought 且每条 body ≥80 字符
-5. 检查首条 thought 是过程叙述不是结论
-6. 检查 cost_usd 总和 ≥0.01
-7. 检查 timestamp 非递减
-8. 检查 step_id 唯一
+3. 检查 tool_call 和 tool_result 的 tool_call_id 集合一致，且每条 tool_result 紧随其 tool_call
+4. 检查 step_order 从 1 连续递增
+5. 检查 ≥3 条 thought 且每条 body ≥80 字符
+6. 检查首条 thought 是过程叙述不是结论
+7. 检查 cost_usd 总和 ≥0.01
+8. 检查 timestamp 非递减
+9. 检查 step_id 唯一
+10. 检查每条都有 duration_s/cost_usd/tokens，且至少一条 tool_result.body 出现在 run.log
+11. **artifacts.json 的 path 必须相对提交 workspace 根**（如 `ch-e2e-1/analysis/results.json`），不是相对 challenge 目录；且 artifact 文件不能被列为 trace/run.log/manifests 本身
+12. solver_guard_submit 的 workspace 必须是包含 challenge 目录和 contract 文件的根目录

@@ -69,6 +69,8 @@ use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolNamespaceTool;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::error::CodexErrorDetails;
+use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ConfigShellToolType;
@@ -1040,7 +1042,7 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
     let features = turn_context.config.features.get();
     let environment_mode = tool_environment_mode(context.environments);
 
-    if solver_mode_enabled() {
+    if solver_profile_submit_tool_enabled(turn_context) {
         registry.add(SolverGuardSubmitHandler);
     }
 
@@ -1151,6 +1153,29 @@ fn solver_mode_enabled() -> bool {
     std::env::var("ASCODEX_SOLVER_MODE")
         .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
         .unwrap_or(false)
+}
+
+/// The Guard submission entry exists only for solver-role worker children.
+/// The chief/operator session runs in the same solver-mode process but must
+/// not see (or attempt) the submission tool; workers get it with their
+/// verified StageBrief. This also keeps heavyweight strict tool schemas out
+/// of non-worker model requests, which otherwise degrade some OpenAI-
+/// compatible providers.
+fn solver_profile_submit_tool_enabled(turn_context: &TurnContext) -> bool {
+    if !solver_mode_enabled() {
+        return false;
+    }
+    let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        agent_role: Some(role),
+        ..
+    }) = turn_context.session_source.clone()
+    else {
+        return false;
+    };
+    matches!(
+        codex_ascodex_coordination::role_from_solver_role_name(&role),
+        Some(codex_ascodex_coordination::Role::Solver)
+    )
 }
 
 #[instrument(level = "trace", skip_all)]

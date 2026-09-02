@@ -62,6 +62,30 @@ pub struct ResponsesOptions {
     pub turn_state: Option<Arc<OnceLock<String>>>,
 }
 
+/// Debug aid: when `ASCODEX_DEBUG_DUMP_REQUESTS` names an existing directory,
+/// write every outgoing Responses request body there (one numbered JSON file
+/// per request). Fails silently — this must never affect the request path.
+fn dump_request_for_debug(request: &ResponsesApiRequest) {
+    use std::sync::atomic::AtomicU64;
+    use std::sync::atomic::Ordering;
+    static SEQ: AtomicU64 = AtomicU64::new(1);
+    let Ok(dir) = std::env::var("ASCODEX_DEBUG_DUMP_REQUESTS") else {
+        return;
+    };
+    if dir.is_empty() || !std::path::Path::new(&dir).is_dir() {
+        return;
+    }
+    let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or_default();
+    let path = std::path::Path::new(&dir).join(format!("request-{stamp}-{:04}.json", seq));
+    if let Ok(text) = serde_json::to_string_pretty(request) {
+        let _ = std::fs::write(path, text);
+    }
+}
+
 impl<T: HttpTransport> ResponsesClient<T> {
     pub fn new(transport: T, provider: Provider, auth: SharedAuthProvider) -> Self {
         Self {
@@ -115,6 +139,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
 
         let body = EncodedJsonBody::encode(&request)
             .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
+        dump_request_for_debug(&request);
 
         let mut headers = extra_headers;
         if let Some(ref thread_id) = thread_id {
