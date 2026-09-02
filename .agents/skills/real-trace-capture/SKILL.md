@@ -47,7 +47,9 @@ description: Capture a Bohrium Playground trace from genuine Codex execution rec
 
 ## 铁律（违反 = trace_quality=0）
 
-1. **tool_result.body 必须是真实 stdout** — 不能是编造的
+1. **tool_result.body 必须是真实 stdout** — 不能是编造的；只写命令的真实输出内容本身，
+   **禁止把 `Exit code: 0` / `Process exited` / 执行时间戳等 CLI 包装元数据拼进 body**
+   （锚定检查要求 body 是 run.log 的逐字子串，包装文本会破坏锚定）
 2. **tool_call/tool_result 必须 1:1 配对** — tool_call_id 一致，tool_result 紧跟其 tool_call
 3. **step_order 从 1 连续** — 不可跳过、重复、从非 1 开始
 4. **无论文引用** — 作者名/年份/方程号/文献值全删
@@ -70,5 +72,6 @@ description: Capture a Bohrium Playground trace from genuine Codex execution rec
 8. 检查 timestamp 非递减
 9. 检查 step_id 唯一
 10. 检查每条都有 duration_s/cost_usd/tokens，且至少一条 tool_result.body 出现在 run.log
-11. **artifacts.json 的 path 必须相对提交 workspace 根**（如 `ch-e2e-1/analysis/results.json`），不是相对 challenge 目录；且 artifact 文件不能被列为 trace/run.log/manifests 本身
+11. **artifacts.json 的 path 必须相对提交 workspace 根**（如 `ch-e2e-1/analysis/results.json`），不是相对 challenge 目录；且 **只能列业务产物**（results/solve.py 等），**禁止列 evidence 文件本身**（trace.jsonl / run.log / artifacts.json / execution.json / channel-probe.json 是证据不是 artifact，gate 会拒绝）
 12. solver_guard_submit 的 workspace 必须是包含 challenge 目录和 contract 文件的根目录
+13. **tool_result.body 必须是字符串**（真实 stdout 文本），禁止塞入对象/数组；多行 stdout 用 JSON 转义的 \n（不要写字面换行破坏 JSONL）
