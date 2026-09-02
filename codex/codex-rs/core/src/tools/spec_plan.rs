@@ -27,6 +27,7 @@ use crate::tools::handlers::RequestUserInputHandler;
 use crate::tools::handlers::SendUserMessageAsyncHandler;
 use crate::tools::handlers::SleepHandler;
 use crate::tools::handlers::SolverGuardSubmitHandler;
+use crate::tools::handlers::BuildTraceHandler;
 use crate::tools::handlers::TestSyncHandler;
 use crate::tools::handlers::ToolSearchHandlerCache;
 use crate::tools::handlers::ViewImageHandler;
@@ -1044,6 +1045,7 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
 
     if solver_profile_submit_tool_enabled(turn_context) {
         registry.add(SolverGuardSubmitHandler);
+        registry.add(BuildTraceHandler);
     }
 
     if turn_context.config.update_plan_enabled {

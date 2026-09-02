@@ -1,5 +1,7 @@
 //! ASCodex's fail-closed policy and attempt ledger boundary.
 
+pub mod trace_builder;
+
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
