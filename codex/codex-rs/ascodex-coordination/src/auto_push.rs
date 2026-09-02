@@ -413,4 +413,92 @@ mod tests {
         tampered.round = 0;
         assert!(tampered.validate().is_err());
     }
+
+    /// Real E2E scenario: a solver ends with no attempt (lazy/drifted end report).
+    /// The guard must push it back, respect the cooldown interval, escalate to a
+    /// clean-room red team after max_pushes, and the Chief always wins inside its
+    /// decision window.
+    #[test]
+    fn e2e_lazy_solver_is_pushed_then_red_teamed_and_chief_wins_window() {
+        let c = closure(true, Some(0.9));
+        let input = AutoPushInput {
+            closure: Some(&c),
+            report: Some(&report(None)), // solver ended without a verifiable attempt
+            peer_higher: false,
+            push_round: 0,
+            ..AutoPushInput::default()
+        };
+        // 1st weak end -> Push (round 1, no red team)
+        match evaluate_auto_push(&input) {
+            AutoPushDecision::Push { round, red_team, .. } => {
+                assert_eq!(round, 1);
+                assert!(!red_team);
+            }
+            other => panic!("expected Push round 1, got {other:?}"),
+        }
+
+        // Cooldown not yet elapsed -> WaitForInterval with a concrete next time.
+        let input = AutoPushInput {
+            closure: Some(&c),
+            report: Some(&report(None)),
+            peer_higher: false,
+            push_round: 1,
+            last_push_at_ms: Some(10_000),
+            min_push_interval_ms: 60_000,
+            now_ms: 30_000,
+            ..AutoPushInput::default()
+        };
+        match evaluate_auto_push(&input) {
+            AutoPushDecision::WaitForInterval { next_push_at_ms } => {
+                assert_eq!(next_push_at_ms, 70_000);
+            }
+            other => panic!("expected WaitForInterval, got {other:?}"),
+        }
+
+        // Interval elapsed, still weak -> Push round 2.
+        let input = AutoPushInput {
+            closure: Some(&c),
+            report: Some(&report(None)),
+            peer_higher: false,
+            push_round: 1,
+            last_push_at_ms: Some(10_000),
+            min_push_interval_ms: 60_000,
+            now_ms: 80_000,
+            max_pushes: 2,
+            ..AutoPushInput::default()
+        };
+        match evaluate_auto_push(&input) {
+            AutoPushDecision::Push { round, red_team, .. } => {
+                assert_eq!(round, 2);
+                assert!(!red_team);
+            }
+            other => panic!("expected Push round 2, got {other:?}"),
+        }
+
+        // Exhausted max_pushes -> escalate to clean-room red team.
+        let input = AutoPushInput {
+            closure: Some(&c),
+            report: Some(&report(None)),
+            peer_higher: false,
+            push_round: 2,
+            last_push_at_ms: Some(140_000),
+            min_push_interval_ms: 60_000,
+            now_ms: 210_000,
+            max_pushes: 2,
+            ..AutoPushInput::default()
+        };
+        match evaluate_auto_push(&input) {
+            AutoPushDecision::Push { round, red_team, .. } => {
+                assert_eq!(round, 3);
+                assert!(red_team, "repeated weak ends must escalate to red team");
+            }
+            other => panic!("expected red-team push, got {other:?}"),
+        }
+
+        // Chief window: no reply yet -> force push once the window elapses.
+        assert!(!should_force_push(50_000, 10_000, 90_000, false));
+        assert!(should_force_push(110_000, 10_000, 90_000, false));
+        // Chief replied -> never force inside or outside the window.
+        assert!(!should_force_push(200_000, 10_000, 90_000, true));
+    }
 }
