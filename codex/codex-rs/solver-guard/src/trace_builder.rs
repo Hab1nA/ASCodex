@@ -345,4 +345,50 @@ mod tests {
         assert!(build_trace_from_runlog(&req).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
+
+    /// Full-loop: builder output must pass the solver-guard admission gate when
+    /// the supporting evidence files (artifact manifest) exist.
+    #[test]
+    fn builder_trace_passes_gate_end_to_end() {
+        let dir = std::env::temp_dir().join(format!("ascodex-tb-gate-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("evidence")).expect("mkdir");
+        fs::create_dir_all(dir.join("analysis")).expect("mkdir analysis");
+        // Real run.log + result artifact.
+        let run_log = dir.join("evidence/run.log");
+        let result = dir.join("analysis/results.json");
+        fs::write(&run_log, "{\n \"light_time\": 2.383432\n}\n").expect("write run.log");
+        fs::write(&result, "{\"light_time\": 2.383432}\n").expect("write result");
+        // artifact manifest: business artifact only, relative to workspace root.
+        let manifest = dir.join("evidence/artifacts.json");
+        fs::write(
+            &manifest,
+            format!(
+                "{{\"artifacts\":[{{\"path\":\"analysis/results.json\",\"sha256\":\"{}\"}}]}}",
+                sha256_hex(&fs::read(&result).expect("read result"))
+            ),
+        )
+        .expect("write manifest");
+
+        let req = TraceBuildRequest {
+            workspace: &dir,
+            run_log_path: &run_log,
+            entrypoint: "python analysis/solve.py",
+            artifact_path: "../analysis/results.json",
+            problem: "compute free-fall times under quadratic drag",
+        };
+        let built = build_trace_from_runlog(&req).expect("build");
+        // trace lives at <workspace>/evidence/trace.jsonl; run_log at evidence/run.log
+        let trace_ev = crate::validate_trace_evidence(
+            &dir,
+            &built.trace_path,
+            &run_log,
+            &manifest,
+        )
+        .expect("trace evidence must pass the gate");
+        assert!(trace_ev.real_execution);
+        assert!(trace_ev.paired_tool_events);
+        assert!(trace_ev.artifact_provenance);
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
