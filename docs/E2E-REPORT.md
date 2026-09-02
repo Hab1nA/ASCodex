@@ -105,3 +105,29 @@ e2e_lazy_solver 集成测试：solver 无 attempt 收工→Push round1→冷却�
 solver 子代理会话确认 StageBrief 注入 4 skill 引用（real-trace-capture /
 trace-contamination-redline / trace-maximize / submit-attempt）+ skill 根 r1 可读，
 子代理按需 Read SKILL.md 全文。无遗漏。
+
+---
+
+# 补充 3：自动评分题真实提交（2026-09-02 续）
+
+## s2-romera-funsearch-llm（grader: grade_via_topic_markdown / fallback arm_v1_1_generic）
+1. M1 cap set 验证（512-cap no-collinear verified，0.3s 向量化）+ M2 mock-LLM
+   evolution（n=4 monotone history）确定性跑通，产 metrics.json + structured outputs
+2. ARM bundle 上传（assemble → POST /api/attempts/{id}/bundle）→ **ready**，
+   scorecard result_fidelity=1.0 / trace_quality=1.0 / output_coverage=0.67
+3. LLM judge 首评 **score=40.35**（gradable full，「Received and graded in full.
+   Partial credit」）
+4. **关键平台发现**：attempt resultsJson error_code=`missing_worker_submission`——
+   纯 bundle 上传不达 S2 Worker 评分队列；官方通道是 **Playground CLI**
+   （`playground submit --outputs --trace`，Worker API http://47.92.88.121:443/api）
+5. Playground CLI 0.1.37（本机已装，authenticated ultron/Ultron-08）真实提交 →
+   **attempt 38872 status=submitted → pending_review**（进 Worker 队列）
+6. 判分：40.35 首评被重评归 0（missing_worker_submission）→ CLI 提交进队列
+   pending_review（grader 需更完整 M2/M3 复现才给分）
+
+## 决定性结论
+- ASCodex 软件链（skill 引导 trace + bundle 组装 + 门控）产出物在自动评分题达
+  ready + 全维度高分 scorecard（result_fidelity/trace_quality=1.0）
+- 真实自动评分需 Playground CLI Worker 通道（已打通，38872 进队列）
+- 高分需完整 M2/M3 复现（mock LLM 真跑 + bin packing + figures + REPORT）——
+  确定性可补，属后续迭代
