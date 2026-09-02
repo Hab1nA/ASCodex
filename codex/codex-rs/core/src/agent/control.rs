@@ -68,6 +68,7 @@ use uuid::Uuid;
 pub(crate) use self::execution::AgentExecutionGuard;
 use self::execution::AgentExecutionLimiter;
 use self::residency::V2Residency;
+pub(crate) use self::spawn::resolve_ascodex_contract_paths;
 
 mod execution;
 mod legacy;
@@ -91,6 +92,20 @@ pub(crate) struct SpawnAgentOptions {
     pub(crate) environments: Option<Vec<TurnEnvironmentSelection>>,
     pub(crate) multi_agent_v2_usage_hints: Option<ResolvedMultiAgentV2UsageHints>,
     pub(crate) cyber_access_program: Option<CyberAccessProgram>,
+    /// Round dispatch context: when set, the solver-profile spawn path authorizes this
+    /// child against the parent's per-challenge cycle binding and lease instead of the
+    /// process-wide single-challenge environment. Only `solver_round_dispatch` sets it.
+    pub(crate) solver_round_challenge: Option<SolverSpawnChallenge>,
+}
+
+/// One challenge's dispatch authority inside a round: the Chief holds one active
+/// cycle binding per challenge, and each child spawn must resolve exactly that
+/// binding rather than an arbitrary one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SolverSpawnChallenge {
+    pub(crate) campaign_id: String,
+    pub(crate) challenge_id: String,
+    pub(crate) chief_lease_id: String,
 }
 
 #[derive(Clone, Debug)]

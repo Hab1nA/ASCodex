@@ -692,6 +692,12 @@ impl AgentControl {
         let solver_mode = std::env::var("ASCODEX_SOLVER_MODE")
             .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
             .unwrap_or(false);
+        if options.solver_round_challenge.is_some() && !solver_mode {
+            return Err(CodexErr::InvalidRequest(
+                "ASCodex round dispatch requires solver mode for the challenge override".into(),
+            ));
+        }
+        let round_challenge = options.solver_round_challenge.clone();
         let stage_brief = if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
             depth,
             agent_role,
@@ -722,9 +728,17 @@ impl AgentControl {
                 )));
             }
             if solver_mode {
-                let cycle_binding = self
-                    .authorize_solver_spawn_from_chief(&state, *parent_thread_id)
-                    .await?;
+                let cycle_binding = if let Some(challenge) = round_challenge.as_ref() {
+                    self.authorize_solver_spawn_from_chief_for_challenge(
+                        &state,
+                        *parent_thread_id,
+                        challenge,
+                    )
+                    .await?
+                } else {
+                    self.authorize_solver_spawn_from_chief(&state, *parent_thread_id)
+                        .await?
+                };
                 let contract_role_name = agent_role.as_deref().ok_or_else(|| {
                     CodexErr::InvalidRequest(
                         "ASCodex contract gate blocked: missing child role".into(),
@@ -878,17 +892,34 @@ impl AgentControl {
                 let parent = parent_thread_id.to_string();
                 let child = new_thread.thread_id.to_string();
                 let child_session_id = self.session_id.to_string();
-                let result = ledger
-                    .bind_child_thread_to_cycle(
-                        &parent,
-                        &child,
-                        &child,
-                        &child_session_id,
-                        role,
-                        &format!("child:{child}"),
-                        now_unix_timestamp_ms(),
-                    )
-                    .await;
+                let now_ms = now_unix_timestamp_ms();
+                let result = if let Some(challenge) = round_challenge.as_ref() {
+                    ledger
+                        .bind_child_thread_to_cycle_for_challenge(
+                            &parent,
+                            &child,
+                            &child,
+                            &child_session_id,
+                            role,
+                            &format!("child:{child}"),
+                            &challenge.campaign_id,
+                            &challenge.challenge_id,
+                            now_ms,
+                        )
+                        .await
+                } else {
+                    ledger
+                        .bind_child_thread_to_cycle(
+                            &parent,
+                            &child,
+                            &child,
+                            &child_session_id,
+                            role,
+                            &format!("child:{child}"),
+                            now_ms,
+                        )
+                        .await
+                };
                 ledger.close().await;
                 if let Err(error) = result {
                     let _ = self.shutdown_live_agent(new_thread.thread_id).await;
@@ -1710,6 +1741,100 @@ impl AgentControl {
         }
         Ok(binding)
     }
+
+    /// Round-dispatch variant of `authorize_solver_spawn_from_chief`: a round Chief holds one
+    /// active cycle binding per challenge on the same thread, so the child's challenge selects
+    /// the parent binding and the per-challenge lease explicitly instead of the process-wide
+    /// single-challenge environment. The lease/parent/session checks are identical.
+    async fn authorize_solver_spawn_from_chief_for_challenge(
+        &self,
+        state: &Arc<ThreadManagerState>,
+        parent_thread_id: ThreadId,
+        challenge: &super::SolverSpawnChallenge,
+    ) -> CodexResult<codex_solver_guard::ThreadCycleBinding> {
+        let parent_thread = state.get_thread(parent_thread_id).await.map_err(|error| {
+            CodexErr::InvalidRequest(format!(
+                "ASCodex round dispatch blocked: live parent thread is unavailable: {error}"
+            ))
+        })?;
+        if parent_thread.session.session_id() != self.session_id
+            || !Arc::ptr_eq(
+                &self.state,
+                &parent_thread.session.services.agent_control.state,
+            )
+        {
+            return Err(CodexErr::InvalidRequest(
+                "ASCodex round dispatch blocked: parent does not belong to this live agent-control session"
+                    .to_string(),
+            ));
+        }
+        let now_ms = parent_thread
+            .session
+            .services
+            .time_provider
+            .current_time(parent_thread_id)
+            .await
+            .map_err(|error| {
+                CodexErr::InvalidRequest(format!(
+                    "ASCodex round dispatch blocked: cannot read trusted Core time: {error:#}"
+                ))
+            })?
+            .timestamp_millis();
+        let ledger_file = required_ascodex_env("ASCODEX_SOLVER_LEDGER_FILE")?;
+        let live_thread_id = parent_thread_id.to_string();
+        let live_session_id = parent_thread.session.session_id().to_string();
+        if let Some(env_lease) = std::env::var("ASCODEX_CHIEF_LEASE_ID")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            && env_lease != challenge.chief_lease_id
+        {
+            return Err(CodexErr::InvalidRequest(
+                "ASCodex round dispatch blocked: ASCODEX_CHIEF_LEASE_ID disagrees with the round plan lease"
+                    .into(),
+            ));
+        }
+        let ledger = codex_solver_guard::Ledger::open_file(std::path::Path::new(&ledger_file))
+            .await
+            .map_err(|error| {
+                CodexErr::InvalidRequest(format!(
+                    "ASCodex round dispatch blocked: cannot open existing Guard ledger: {error}"
+                ))
+            })?;
+        let resolved = ledger
+            .resolve_thread_cycle_binding_for_challenge(
+                &live_thread_id,
+                &live_session_id,
+                codex_ascodex_coordination::Role::Chief,
+                &challenge.campaign_id,
+                &challenge.challenge_id,
+                now_ms,
+            )
+            .await;
+        ledger.close().await;
+        let binding = resolved.map_err(|error| {
+            CodexErr::InvalidRequest(format!("ASCodex round dispatch blocked: {error}"))
+        })?;
+        if challenge.chief_lease_id != binding.chief_lease_id {
+            return Err(CodexErr::InvalidRequest(
+                "ASCodex round dispatch blocked: round plan lease does not match durable cycle binding"
+                    .into(),
+            ));
+        }
+        verify_chief_spawn_lease(
+            std::path::Path::new(&ledger_file),
+            &challenge.chief_lease_id,
+            &binding.agent_id,
+            &binding.session_id,
+            &live_thread_id,
+            &binding.campaign_id,
+            &binding.challenge_id,
+            &binding.cycle_id,
+            binding.cycle_event_version,
+            now_ms,
+        )
+        .await?;
+        Ok(binding)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1946,16 +2071,54 @@ async fn load_stage_brief_for_spawn(
     .map_err(|error| CodexErr::InvalidRequest(format!("ASCodex stage brief blocked: {error}")))
 }
 
+/// Resolve the typed ChallengeContract pair for one challenge. Single-challenge mode keeps
+/// the process-wide `ASCODEX_CONTRACT_FILE`/`ASCODEX_CONTRACT_INPUT_FILE` pair; round mode
+/// sets `ASCODEX_CONTRACT_DIR` and each challenge resolves to
+/// `<dir>/<challenge_id>.json` + `<dir>/<challenge_id>.fingerprint-input.json`.
+/// Both modes fail closed when nothing resolvable is configured.
+pub(crate) fn resolve_ascodex_contract_paths(
+    challenge_id: &str,
+) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let from_env = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+    };
+    let contract_file = from_env("ASCODEX_CONTRACT_FILE");
+    let fingerprint_input_file = from_env("ASCODEX_CONTRACT_INPUT_FILE");
+    match (contract_file, fingerprint_input_file) {
+        (Some(contract), Some(input)) => Ok((std::path::PathBuf::from(contract), std::path::PathBuf::from(input))),
+        (None, None) => {
+            let dir = from_env("ASCODEX_CONTRACT_DIR").ok_or_else(|| {
+                "either ASCODEX_CONTRACT_FILE/INPUT_FILE or ASCODEX_CONTRACT_DIR must be configured"
+                    .to_string()
+            })?;
+            if !std::path::Path::new(&dir).is_absolute() {
+                return Err("ASCODEX_CONTRACT_DIR must be an absolute path".to_string());
+            }
+            let dir = std::path::PathBuf::from(dir);
+            Ok((
+                dir.join(format!("{challenge_id}.json")),
+                dir.join(format!("{challenge_id}.fingerprint-input.json")),
+            ))
+        }
+        (Some(_), None) => Err("ASCODEX_CONTRACT_INPUT_FILE is required when ASCODEX_CONTRACT_FILE is set".to_string()),
+        (None, Some(_)) => Err("ASCODEX_CONTRACT_FILE is required when ASCODEX_CONTRACT_INPUT_FILE is set".to_string()),
+    }
+}
+
 fn validate_contract_for_spawn(
     binding: &codex_solver_guard::ThreadCycleBinding,
     role: codex_ascodex_coordination::Role,
     now_ms: i64,
 ) -> CodexResult<()> {
-    let contract_file = required_ascodex_env("ASCODEX_CONTRACT_FILE")?;
-    let fingerprint_input_file = required_ascodex_env("ASCODEX_CONTRACT_INPUT_FILE")?;
+    let (contract_file, fingerprint_input_file) =
+        resolve_ascodex_contract_paths(&binding.challenge_id).map_err(|error| {
+            CodexErr::InvalidRequest(format!("ASCodex contract gate blocked: {error}"))
+        })?;
     codex_solver_guard::validate_contract_files(
-        std::path::Path::new(&contract_file),
-        std::path::Path::new(&fingerprint_input_file),
+        &contract_file,
+        &fingerprint_input_file,
         &binding.challenge_id,
         Some(role),
         now_ms,

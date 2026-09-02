@@ -27,6 +27,7 @@ use crate::tools::handlers::RequestUserInputHandler;
 use crate::tools::handlers::SendUserMessageAsyncHandler;
 use crate::tools::handlers::SleepHandler;
 use crate::tools::handlers::SolverGuardSubmitHandler;
+use crate::tools::handlers::SolverRoundDispatchHandler;
 use crate::tools::handlers::BuildTraceHandler;
 use crate::tools::handlers::TestSyncHandler;
 use crate::tools::handlers::ToolSearchHandlerCache;
@@ -1048,6 +1049,10 @@ fn add_core_utility_tools(context: &CoreToolPlanContext<'_>, registry: &mut Tool
         registry.add(BuildTraceHandler);
     }
 
+    if solver_round_dispatch_enabled(turn_context) {
+        registry.add(SolverRoundDispatchHandler);
+    }
+
     if turn_context.config.update_plan_enabled {
         registry.add(PlanHandler);
     }
@@ -1178,6 +1183,13 @@ fn solver_profile_submit_tool_enabled(turn_context: &TurnContext) -> bool {
         codex_ascodex_coordination::role_from_solver_role_name(&role),
         Some(codex_ascodex_coordination::Role::Solver)
     )
+}
+
+/// The round dispatch fan-out exists only for the root chief session in solver
+/// mode. Worker children never see it (they are spawned by it), and non-solver
+/// sessions must not fan out guarded solver work at all.
+fn solver_round_dispatch_enabled(turn_context: &TurnContext) -> bool {
+    solver_mode_enabled() && !turn_context.session_source.is_non_root_agent()
 }
 
 #[instrument(level = "trace", skip_all)]

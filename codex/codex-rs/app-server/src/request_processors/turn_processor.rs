@@ -37,12 +37,22 @@ pub(super) fn validate_user_input_image_urls(
 // SolverMode) and validates them with the shared solver-guard preflight. Fail-closed: missing
 // environment or an invalid/unknown contract blocks the turn. Outside solver mode this is a
 // no-op, preserving official behavior.
+//
+// Round mode: when ASCODEX_ROUND_PLAN_FILE is set, the chief operates at round scope and the
+// round plan (challenge set + per-challenge leases) is the round contract. Per-challenge
+// ChallengeContracts are still enforced at spawn time and at submission time, so this gate
+// widens nothing for workers.
 fn ascodex_turn_start_contract_preflight() -> Result<(), JSONRPCErrorError> {
     let solver_mode = std::env::var("ASCODEX_SOLVER_MODE")
         .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
         .unwrap_or(false);
     if !solver_mode {
         return Ok(());
+    }
+    if let Ok(round_plan_file) = std::env::var("ASCODEX_ROUND_PLAN_FILE")
+        && !round_plan_file.trim().is_empty()
+    {
+        return ascodex_round_plan_preflight(&round_plan_file);
     }
     let required = |name: &str| {
         std::env::var(name)
@@ -66,6 +76,29 @@ fn ascodex_turn_start_contract_preflight() -> Result<(), JSONRPCErrorError> {
     )
     .map(|_| ())
     .map_err(|error| invalid_request(format!("ASCodex contract gate blocked: {error}")))
+}
+
+fn ascodex_round_plan_preflight(round_plan_file: &str) -> Result<(), JSONRPCErrorError> {
+    if !std::path::Path::new(round_plan_file).is_absolute() {
+        return Err(invalid_request(
+            "ASCodex round contract gate requires an absolute ASCODEX_ROUND_PLAN_FILE",
+        ));
+    }
+    let metadata = std::fs::metadata(round_plan_file).map_err(|error| {
+        invalid_request(format!("ASCodex round contract gate cannot read the plan: {error}"))
+    })?;
+    if !metadata.is_file() || metadata.len() > 256 * 1024 {
+        return Err(invalid_request(
+            "ASCodex round plan must be a file of at most 256 KiB",
+        ));
+    }
+    let bytes = std::fs::read(round_plan_file).map_err(|error| {
+        invalid_request(format!("ASCodex round contract gate cannot read the plan: {error}"))
+    })?;
+    let plan: codex_ascodex_coordination::RoundPlan = serde_json::from_slice(&bytes)
+        .map_err(|error| invalid_request(format!("invalid round plan: {error}")))?;
+    plan.validate()
+        .map_err(|error| invalid_request(format!("ASCodex round contract gate blocked: {error}")))
 }
 
 fn validate_response_item_image_urls(items: &[ResponseItem]) -> Result<(), JSONRPCErrorError> {

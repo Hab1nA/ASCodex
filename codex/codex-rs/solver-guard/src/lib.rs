@@ -8,6 +8,7 @@ use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 use sqlx::{
     Row, Sqlite, SqlitePool, Transaction, sqlite::SqliteConnectOptions, sqlite::SqlitePoolOptions,
+    sqlite::SqliteRow,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -2202,8 +2203,15 @@ impl Ledger {
         )
         .execute(&pool)
         .await?;
+        // A round Chief holds one ACTIVE binding per challenge on the same thread, so the
+        // partial uniqueness key is (thread, challenge) — not thread alone. The original
+        // index (thread_id only) is dropped and rebuilt so ledgers created before rounds
+        // migrate on open instead of silently rejecting the second per-challenge binding.
+        sqlx::query("DROP INDEX IF EXISTS thread_cycle_active_idx")
+            .execute(&pool)
+            .await?;
         sqlx::query(
-            "CREATE UNIQUE INDEX IF NOT EXISTS thread_cycle_active_idx ON thread_cycle_bindings (thread_id) WHERE revoked_at_ms IS NULL",
+            "CREATE UNIQUE INDEX IF NOT EXISTS thread_cycle_active_idx ON thread_cycle_bindings (thread_id, challenge_id) WHERE revoked_at_ms IS NULL",
         )
         .execute(&pool)
         .await?;
@@ -2832,14 +2840,128 @@ impl Ledger {
                 "child cycle binding agent identity must equal its thread identity".into(),
             ));
         }
-        let parent_row = sqlx::query(
+        let parent_rows = sqlx::query(
             "SELECT thread_id, agent_id, session_id, campaign_id, challenge_id, cycle_id, cycle_event_version, chief_lease_id, issued_at_ms, revoked_at_ms FROM thread_cycle_bindings WHERE thread_id = ? AND role = ? AND revoked_at_ms IS NULL",
         )
         .bind(parent_thread_id)
         .bind(role_name(Role::Chief))
+        .fetch_all(&self.pool)
+        .await?;
+        let parent_row = match parent_rows.len() {
+            0 => {
+                return Err(LedgerError::Degraded(
+                    "parent thread has no active Chief cycle binding".into(),
+                ));
+            }
+            1 => parent_rows.into_iter().next().expect("single chief row"),
+            // Ambiguity here would bind the child to an arbitrary challenge.
+            // The round path must use `bind_child_thread_to_cycle_for_challenge`.
+            _ => {
+                return Err(LedgerError::Degraded(
+                    "parent thread has multiple active Chief cycle bindings; use challenge-scoped binding"
+                        .into(),
+                ));
+            }
+        };
+        let parent_cycle_id: String = parent_row.try_get("cycle_id")?;
+        let parent_campaign_id: String = parent_row.try_get("campaign_id")?;
+        let parent_challenge_id: String = parent_row.try_get("challenge_id")?;
+        let parent_version = u64::try_from(parent_row.try_get::<i64, _>("cycle_event_version")?)
+            .map_err(|_| LedgerError::Degraded("stored cycle event version is invalid".into()))?;
+        let parent_lease_id: String = parent_row.try_get("chief_lease_id")?;
+        if parent_row.try_get::<String, _>("session_id")? != child_session_id {
+            return Err(LedgerError::Degraded(
+                "child cycle binding session does not match the Chief parent session".into(),
+            ));
+        }
+        let parent = self
+            .load_active_cycle_for_binding(
+                &parent_cycle_id,
+                &parent_campaign_id,
+                &parent_challenge_id,
+                &parent_lease_id,
+                parent_version,
+                now_ms,
+            )
+            .await?;
+        let _brief = self
+            .load_stage_brief_issuance(
+                &StageBriefLedgerTarget {
+                    cycle_id: &parent.cycle_id,
+                    campaign_id: &parent_campaign_id,
+                    challenge_id: &parent_challenge_id,
+                    role,
+                },
+                now_ms,
+            )
+            .await?;
+        let binding = ThreadCycleBinding {
+            binding_id: binding_id.to_string(),
+            thread_id: child_thread_id.to_string(),
+            parent_thread_id: Some(parent_thread_id.to_string()),
+            agent_id: child_agent_id.to_string(),
+            session_id: child_session_id.to_string(),
+            campaign_id: parent_campaign_id,
+            challenge_id: parent_challenge_id,
+            cycle_id: parent.cycle_id,
+            cycle_event_version: parent_version,
+            chief_lease_id: parent_lease_id,
+            role,
+            issued_at_ms: now_ms,
+            revoked_at_ms: None,
+        };
+        self.insert_thread_cycle_binding(&binding).await?;
+        Ok(binding)
+    }
+
+    /// Bind a freshly-created direct child to its parent's active cycle for ONE challenge.
+    /// Round dispatch must pick the parent's per-challenge binding explicitly instead of the
+    /// single-binding thread lookup, because a round Chief holds one active binding per
+    /// challenge on the same thread. The brief check and all identity rules are identical.
+    pub async fn bind_child_thread_to_cycle_for_challenge(
+        &self,
+        parent_thread_id: &str,
+        child_thread_id: &str,
+        child_agent_id: &str,
+        child_session_id: &str,
+        role: Role,
+        binding_id: &str,
+        campaign_id: &str,
+        challenge_id: &str,
+        now_ms: i64,
+    ) -> Result<ThreadCycleBinding, LedgerError> {
+        if parent_thread_id.trim().is_empty()
+            || child_thread_id.trim().is_empty()
+            || child_agent_id.trim().is_empty()
+            || child_session_id.trim().is_empty()
+            || binding_id.trim().is_empty()
+            || campaign_id.trim().is_empty()
+            || challenge_id.trim().is_empty()
+            || role == Role::Chief
+        {
+            return Err(LedgerError::Degraded(
+                "child cycle binding requires complete identities and a worker role".into(),
+            ));
+        }
+        if child_agent_id != child_thread_id {
+            return Err(LedgerError::Degraded(
+                "child cycle binding agent identity must equal its thread identity".into(),
+            ));
+        }
+        let parent_row = sqlx::query(
+            "SELECT thread_id, agent_id, session_id, campaign_id, challenge_id, cycle_id, cycle_event_version, chief_lease_id, issued_at_ms, revoked_at_ms FROM thread_cycle_bindings WHERE thread_id = ? AND role = ? AND campaign_id = ? AND challenge_id = ? AND revoked_at_ms IS NULL",
+        )
+        .bind(parent_thread_id)
+        .bind(role_name(Role::Chief))
+        .bind(campaign_id)
+        .bind(challenge_id)
         .fetch_optional(&self.pool)
         .await?
-        .ok_or_else(|| LedgerError::Degraded("parent thread has no active Chief cycle binding".into()))?;
+        .ok_or_else(|| {
+            LedgerError::Degraded(
+                "parent thread has no active Chief cycle binding for this challenge".into(),
+            )
+        })?;
         let parent_cycle_id: String = parent_row.try_get("cycle_id")?;
         let parent_campaign_id: String = parent_row.try_get("campaign_id")?;
         let parent_challenge_id: String = parent_row.try_get("challenge_id")?;
@@ -2910,13 +3032,97 @@ impl Ledger {
                 "thread cycle lookup requires live identity".into(),
             ));
         }
-        let row = sqlx::query(
+        let rows = sqlx::query(
             "SELECT binding_id, thread_id, parent_thread_id, agent_id, session_id, campaign_id, challenge_id, cycle_id, cycle_event_version, chief_lease_id, role, issued_at_ms, revoked_at_ms FROM thread_cycle_bindings WHERE thread_id = ? AND revoked_at_ms IS NULL",
         )
         .bind(thread_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let row = match rows.len() {
+            0 => {
+                return Err(LedgerError::Degraded("thread has no active cycle binding".into()));
+            }
+            1 => rows.into_iter().next().expect("single binding row"),
+            // A round Chief holds one active binding per challenge on the same
+            // thread. Resolving "the" binding by thread alone would pick an
+            // arbitrary challenge, so ambiguous lookups fail closed here; the
+            // round path must use the challenge-scoped resolution instead.
+            _ => {
+                return Err(LedgerError::Degraded(
+                    "thread has multiple active cycle bindings; use challenge-scoped resolution"
+                        .into(),
+                ));
+            }
+        };
+        self.finish_thread_cycle_binding(
+            row,
+            agent_id,
+            session_id,
+            parent_thread_id,
+            role,
+            now_ms,
+        )
+        .await
+    }
+
+    /// Resolve the live thread's durable cycle binding for ONE challenge. A round Chief
+    /// legitimately holds one active binding per challenge on the same thread, so round
+    /// dispatch must never resolve "the" binding by thread alone: this entry point requires
+    /// exactly one active (thread, role, campaign, challenge) row and then runs the same
+    /// cycle/brief validation as `resolve_thread_cycle_binding`.
+    pub async fn resolve_thread_cycle_binding_for_challenge(
+        &self,
+        thread_id: &str,
+        session_id: &str,
+        role: Role,
+        campaign_id: &str,
+        challenge_id: &str,
+        now_ms: i64,
+    ) -> Result<ThreadCycleBinding, LedgerError> {
+        if [thread_id, session_id, campaign_id, challenge_id]
+            .iter()
+            .any(|value| value.trim().is_empty())
+        {
+            return Err(LedgerError::Degraded(
+                "challenge-scoped cycle lookup requires live identity and challenge".into(),
+            ));
+        }
+        let row = sqlx::query(
+            "SELECT binding_id, thread_id, parent_thread_id, agent_id, session_id, campaign_id, challenge_id, cycle_id, cycle_event_version, chief_lease_id, role, issued_at_ms, revoked_at_ms FROM thread_cycle_bindings WHERE thread_id = ? AND role = ? AND campaign_id = ? AND challenge_id = ? AND revoked_at_ms IS NULL",
+        )
+        .bind(thread_id)
+        .bind(role_name(role))
+        .bind(campaign_id)
+        .bind(challenge_id)
         .fetch_optional(&self.pool)
         .await?
-        .ok_or_else(|| LedgerError::Degraded("thread has no active cycle binding".into()))?;
+        .ok_or_else(|| {
+            LedgerError::Degraded("thread has no active cycle binding for this challenge".into())
+        })?;
+        let agent_id: String = row.try_get("agent_id")?;
+        let stored_parent: Option<String> = row.try_get("parent_thread_id")?;
+        self.finish_thread_cycle_binding(
+            row,
+            &agent_id,
+            session_id,
+            stored_parent.as_deref(),
+            role,
+            now_ms,
+        )
+        .await
+    }
+
+    /// Shared tail of every thread-cycle resolution: identity checks against the stored row,
+    /// active-cycle validation, and the worker-role StageBrief check.
+    async fn finish_thread_cycle_binding(
+        &self,
+        row: SqliteRow,
+        agent_id: &str,
+        session_id: &str,
+        parent_thread_id: Option<&str>,
+        role: Role,
+        now_ms: i64,
+    ) -> Result<ThreadCycleBinding, LedgerError> {
         let stored_parent: Option<String> = row.try_get("parent_thread_id")?;
         if row.try_get::<String, _>("agent_id")? != agent_id
             || row.try_get::<String, _>("session_id")? != session_id
@@ -7087,6 +7293,193 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn round_chief_holds_one_binding_per_challenge_and_children_bind_by_challenge() {
+        let dir = tempdir().expect("tempdir");
+        let workspace = dir.path().join("workspace");
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        let (cycle_a, capability_map_a) = issued_cycle(&workspace);
+
+        // Second challenge under the same campaign, same chief identity, separate lease.
+        let mut chief_b = chief_actor_context("chief-lease-b");
+        chief_b.challenge_id = "challenge-b".to_string();
+        chief_b.lease.challenge_id = "challenge-b".to_string();
+        let mut cycle_b = issued_cycle(&workspace).0;
+        {
+            let challenge_workspace = workspace.join("work/challenge-b");
+            std::fs::create_dir_all(&challenge_workspace).expect("challenge-b workspace");
+            cycle_b.cycle_id = "cycle-b".to_string();
+            cycle_b.challenge_id = "challenge-b".to_string();
+            cycle_b.expected_state_version = 1;
+            cycle_b.ooda.cycle_id = "cycle-b".to_string();
+            cycle_b.ooda.challenge_id = "challenge-b".to_string();
+            cycle_b.ooda.expected_state_version = 1;
+            cycle_b.worker_report.as_mut().expect("worker report").challenge_id =
+                "challenge-b".to_string();
+            cycle_b.experiment_plan.as_mut().expect("plan").challenge_id =
+                "challenge-b".to_string();
+            let mut brief = cycle_b.stage_briefs.remove(0);
+            brief.brief_id = "brief-b".to_string();
+            brief.challenge_id = "challenge-b".to_string();
+            brief.challenge_workspace_root = challenge_workspace;
+            cycle_b.stage_briefs.push(brief);
+        }
+
+        let ledger = Ledger::connect("sqlite::memory:").await.expect("connect");
+        ledger
+            .provision_actor_context(&chief_actor_context("chief-lease-a"), 200)
+            .await
+            .expect("provision chief-a");
+        ledger
+            .provision_actor_context(&chief_b, 200)
+            .await
+            .expect("provision chief-b");
+        let payload_a = cycle_payload(&cycle_a);
+        let event_a = cycle_event(&cycle_a, &payload_a, 200);
+        ledger
+            .issue_research_cycle_audited(
+                &chief_actor_context("chief-lease-a"),
+                &cycle_a,
+                &workspace,
+                &capability_map_a,
+                200,
+                &event_a,
+            )
+            .await
+            .expect("issue cycle-a");
+        let payload_b = cycle_payload(&cycle_b);
+        let event_b = CoordinationEventRecord {
+            event_id: "cycle-issued-round-b",
+            idempotency_key: "cycle-issued-key-round-b",
+            aggregate_type: "campaign",
+            aggregate_id: "campaign-a",
+            expected_version: cycle_b.expected_state_version,
+            event_type: "research_cycle_issued",
+            payload_json: &payload_b,
+            occurred_at_ms: 200,
+        };
+        ledger
+            .issue_research_cycle_audited(&chief_b, &cycle_b, &workspace, &capability_map_a, 200, &event_b)
+            .await
+            .expect("issue cycle-b");
+
+        // The round Chief resolves each challenge's binding explicitly.
+        let binding_a = ledger
+            .resolve_thread_cycle_binding_for_challenge(
+                "thread-chief",
+                "session-chief",
+                Role::Chief,
+                "campaign-a",
+                "challenge-a",
+                300,
+            )
+            .await
+            .expect("resolve challenge-a binding");
+        assert_eq!(binding_a.cycle_id, "cycle-a");
+        assert_eq!(binding_a.chief_lease_id, "chief-lease-a");
+        let binding_b = ledger
+            .resolve_thread_cycle_binding_for_challenge(
+                "thread-chief",
+                "session-chief",
+                Role::Chief,
+                "campaign-a",
+                "challenge-b",
+                300,
+            )
+            .await
+            .expect("resolve challenge-b binding");
+        assert_eq!(binding_b.cycle_id, "cycle-b");
+        assert_eq!(binding_b.chief_lease_id, "chief-lease-b");
+        assert!(
+            ledger
+                .resolve_thread_cycle_binding_for_challenge(
+                    "thread-chief",
+                    "session-chief",
+                    Role::Chief,
+                    "campaign-a",
+                    "challenge-c",
+                    300,
+                )
+                .await
+                .is_err(),
+            "unknown challenge must fail closed"
+        );
+        // The unfiltered lookup is now ambiguous and must fail closed instead of
+        // silently resolving an arbitrary challenge.
+        assert!(
+            ledger
+                .resolve_thread_cycle_binding(
+                    "thread-chief",
+                    "chief-a",
+                    "session-chief",
+                    None,
+                    Role::Chief,
+                    300,
+                )
+                .await
+                .is_err()
+        );
+
+        // Children bind to the parent's per-challenge binding.
+        let child_a = ledger
+            .bind_child_thread_to_cycle_for_challenge(
+                "thread-chief",
+                "thread-solver-a",
+                "thread-solver-a",
+                "session-chief",
+                Role::Solver,
+                "child-binding-round-a",
+                "campaign-a",
+                "challenge-a",
+                300,
+            )
+            .await
+            .expect("bind child-a");
+        assert_eq!(child_a.challenge_id, "challenge-a");
+        let child_b = ledger
+            .bind_child_thread_to_cycle_for_challenge(
+                "thread-chief",
+                "thread-solver-b",
+                "thread-solver-b",
+                "session-chief",
+                Role::Solver,
+                "child-binding-round-b",
+                "campaign-a",
+                "challenge-b",
+                300,
+            )
+            .await
+            .expect("bind child-b");
+        assert_eq!(child_b.challenge_id, "challenge-b");
+        assert_eq!(child_b.cycle_id, "cycle-b");
+
+        // Each solver child holds exactly one binding and resolves its own challenge.
+        let resolved_a = ledger
+            .resolve_thread_cycle_binding(
+                "thread-solver-a",
+                "thread-solver-a",
+                "session-chief",
+                Some("thread-chief"),
+                Role::Solver,
+                300,
+            )
+            .await
+            .expect("resolve child-a binding");
+        assert_eq!(resolved_a.challenge_id, "challenge-a");
+        let resolved_b = ledger
+            .resolve_thread_cycle_binding(
+                "thread-solver-b",
+                "thread-solver-b",
+                "session-chief",
+                Some("thread-chief"),
+                Role::Solver,
+                300,
+            )
+            .await
+            .expect("resolve child-b binding");
+        assert_eq!(resolved_b.challenge_id, "challenge-b");
     }
 
     #[tokio::test]

@@ -258,26 +258,103 @@ impl SolverGuardSubmitHandler {
             }
         };
         // Identity/campaign/channel fields are optional in the tool contract:
-        // they default to the digest-gated Guard policy and the bound cycle
-        // environment, so a worker cannot desynchronize them from the policy
-        // by misremembering them, and the model request stays small.
+        // they default to the durable per-thread cycle binding (the round-parallel
+        // authoritative source, so N concurrent workers never share a process-wide
+        // challenge environment), then the cycle environment, then the digest-gated
+        // Guard policy. A worker cannot desynchronize them from its binding by
+        // misremembering them, and the model request stays small.
         let from_env = |name: &str| {
             std::env::var(name)
                 .ok()
                 .filter(|value| !value.trim().is_empty())
         };
-        let resolve_field = |supplied: &Option<String>, env_name: &str, policy_value: &str| -> String {
+        let ledger_path = match std::env::var("ASCODEX_SOLVER_LEDGER_FILE") {
+            Ok(path) if !path.trim().is_empty() => path,
+            _ => {
+                return json!({
+                    "allowed": false,
+                    "status": "blocked",
+                    "dry_run": true,
+                    "reason": "ASCODEX_SOLVER_LEDGER_FILE is not configured",
+                });
+            }
+        };
+        let ledger_path = Path::new(&ledger_path);
+        if !ledger_path.is_absolute() {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": "ASCODEX_SOLVER_LEDGER_FILE must be absolute",
+            });
+        }
+        let ledger = match codex_solver_guard::Ledger::connect_file(ledger_path).await {
+            Ok(ledger) => ledger,
+            Err(err) => {
+                return json!({
+                    "allowed": false,
+                    "status": "ledger_unavailable",
+                    "dry_run": true,
+                    "reason": format!("cannot open Guard ledger: {err}"),
+                });
+            }
+        };
+        // A spawned solver worker holds no operator-registered actor lease: its ledger
+        // authority is the thread_cycle_bindings row that the authorized Chief spawn
+        // wrote for this live thread (active cycle, valid brief, matching session).
+        // Resolve it first: the binding's campaign/challenge are the authoritative
+        // identity defaults for this submission.
+        let binding = match ledger
+            .resolve_thread_cycle_binding_for_live_thread(
+                runtime_agent_id,
+                &runtime_session_id,
+                codex_ascodex_coordination::Role::Solver,
+                now_ms,
+            )
+            .await
+        {
+            Ok(binding) => binding,
+            Err(err) => {
+                return json!({
+                    "allowed": false,
+                    "status": "blocked",
+                    "dry_run": true,
+                    "reason": format!("solver cycle binding validation failed: {err}"),
+                });
+            }
+        };
+        let resolve_field = |supplied: &Option<String>,
+                             binding_value: &str,
+                             env_name: &str,
+                             policy_value: &str| -> String {
             non_empty(supplied.clone())
+                .or_else(|| non_empty(Some(binding_value.to_string())))
                 .or_else(|| from_env(env_name))
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| policy_value.to_string())
         };
-        let challenge_id =
-            resolve_field(&args.challenge_id, "ASCODEX_CHALLENGE_ID", &policy.identity.challenge_id);
-        let campaign_id =
-            resolve_field(&args.campaign_id, "ASCODEX_CAMPAIGN_ID", &policy.identity.challenge_id);
-        let identity = resolve_field(&args.identity, "ASCODEX_IDENTITY", &policy.identity.name);
-        let owner = resolve_field(&args.owner, "ASCODEX_OWNER", &policy.identity.owner);
+        let challenge_id = resolve_field(
+            &args.challenge_id,
+            &binding.challenge_id,
+            "ASCODEX_CHALLENGE_ID",
+            &policy.identity.challenge_id,
+        );
+        let campaign_id = resolve_field(
+            &args.campaign_id,
+            &binding.campaign_id,
+            "ASCODEX_CAMPAIGN_ID",
+            &policy.identity.challenge_id,
+        );
+        if binding.challenge_id != challenge_id || binding.campaign_id != campaign_id {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": "cycle binding challenge/campaign does not match the submission",
+            });
+        }
+        let identity = resolve_field(&args.identity, "", "ASCODEX_IDENTITY", &policy.identity.name);
+        let owner = resolve_field(&args.owner, "", "ASCODEX_OWNER", &policy.identity.owner);
         let identity_class_default = policy
             .identity_pool
             .iter()
@@ -289,10 +366,10 @@ impl SolverGuardSubmitHandler {
             .map(|entry| entry.identity_class.clone())
             .unwrap_or_default();
         let identity_class =
-            resolve_field(&args.identity_class, "ASCODEX_IDENTITY_CLASS", &identity_class_default);
-        let channel = resolve_field(&args.channel, "ASCODEX_CHANNEL", "harbor");
-        let provider = resolve_field(&args.provider, "ASCODEX_MODEL_PROVIDER", &policy.model.provider);
-        let model = resolve_field(&args.model, "ASCODEX_MODEL", &policy.model.model);
+            resolve_field(&args.identity_class, "", "ASCODEX_IDENTITY_CLASS", &identity_class_default);
+        let channel = resolve_field(&args.channel, "", "ASCODEX_CHANNEL", "harbor");
+        let provider = resolve_field(&args.provider, "", "ASCODEX_MODEL_PROVIDER", &policy.model.provider);
+        let model = resolve_field(&args.model, "", "ASCODEX_MODEL", &policy.model.model);
         let _lease_id = non_empty(args.lease_id.clone()).unwrap_or_else(|| "binding".to_string());
         let estimated_cost_usd = args.estimated_cost_usd.unwrap_or(0.0);
         if identity_class.trim().is_empty() {
@@ -304,10 +381,22 @@ impl SolverGuardSubmitHandler {
             });
         }
         let workspace = Path::new(&args.workspace);
+        let (contract_file, contract_input_file) =
+            match crate::agent::control::resolve_ascodex_contract_paths(&challenge_id) {
+                Ok(paths) => paths,
+                Err(err) => {
+                    return json!({
+                        "allowed": false,
+                        "status": "blocked",
+                        "dry_run": true,
+                        "reason": format!("contract gate blocked: {err}"),
+                    });
+                }
+            };
         if let Err(err) = validate_submission_contract_files(
             workspace,
-            &std::env::var("ASCODEX_CONTRACT_FILE").unwrap_or_default(),
-            &std::env::var("ASCODEX_CONTRACT_INPUT_FILE").unwrap_or_default(),
+            &contract_file.to_string_lossy(),
+            &contract_input_file.to_string_lossy(),
             &challenge_id,
             now_ms,
         ) {
@@ -433,37 +522,6 @@ impl SolverGuardSubmitHandler {
             // smoke bound via the policy when a real cloud job context is later provided.
             bohr_job: None,
         };
-        let ledger_path = match std::env::var("ASCODEX_SOLVER_LEDGER_FILE") {
-            Ok(path) if !path.trim().is_empty() => path,
-            _ => {
-                return json!({
-                    "allowed": false,
-                    "status": "blocked",
-                    "dry_run": true,
-                    "reason": "ASCODEX_SOLVER_LEDGER_FILE is not configured",
-                });
-            }
-        };
-        let ledger_path = Path::new(&ledger_path);
-        if !ledger_path.is_absolute() {
-            return json!({
-                "allowed": false,
-                "status": "blocked",
-                "dry_run": true,
-                "reason": "ASCODEX_SOLVER_LEDGER_FILE must be absolute",
-            });
-        }
-        let ledger = match codex_solver_guard::Ledger::connect_file(ledger_path).await {
-            Ok(ledger) => ledger,
-            Err(err) => {
-                return json!({
-                    "allowed": false,
-                    "status": "ledger_unavailable",
-                    "dry_run": true,
-                    "reason": format!("cannot open Guard ledger: {err}"),
-                });
-            }
-        };
         // The ledger is the runtime-authoritative identity pool once any active entry exists:
         // an identity without a ledger binding fails closed instead of using the YAML pool.
         let mut policy = policy;
@@ -497,39 +555,6 @@ impl SolverGuardSubmitHandler {
             });
         }
 
-        // A spawned solver worker holds no operator-registered actor lease:
-        // its ledger authority is the thread_cycle_bindings row that the
-        // authorized Chief spawn wrote for this live thread (active cycle,
-        // valid brief, matching session). Resolve that binding directly so
-        // the dispatch->submit chain closes without a second registration.
-        match ledger
-            .resolve_thread_cycle_binding_for_live_thread(
-                runtime_agent_id,
-                &runtime_session_id,
-                codex_ascodex_coordination::Role::Solver,
-                now_ms,
-            )
-            .await
-        {
-            Ok(binding) => {
-                if binding.challenge_id != challenge_id || binding.campaign_id != campaign_id {
-                    return json!({
-                        "allowed": false,
-                        "status": "blocked",
-                        "dry_run": true,
-                        "reason": "cycle binding challenge/campaign does not match the submission",
-                    });
-                }
-            }
-            Err(err) => {
-                return json!({
-                    "allowed": false,
-                    "status": "blocked",
-                    "dry_run": true,
-                    "reason": format!("solver cycle binding validation failed: {err}"),
-                });
-            }
-        }
         let budget = policy.cadence.max_estimated_cost_usd;
         let broker = codex_solver_guard::SubmissionBroker::new(policy, ledger);
         let content_tag: String = request.content_sha256.chars().take(16).collect();

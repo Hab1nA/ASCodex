@@ -13,6 +13,7 @@ mod contract;
 mod reconciliation;
 mod recovery_canary;
 mod research_cycle;
+mod round_plan;
 mod stage_brief;
 mod workspace_acl;
 
@@ -21,6 +22,7 @@ pub use contract::*;
 pub use reconciliation::*;
 pub use recovery_canary::*;
 pub use research_cycle::*;
+pub use round_plan::*;
 pub use stage_brief::*;
 pub use workspace_acl::*;
 
