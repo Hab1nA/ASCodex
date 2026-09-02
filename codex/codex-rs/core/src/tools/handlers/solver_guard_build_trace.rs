@@ -78,7 +78,11 @@ impl ToolExecutor<ToolInvocation> for BuildTraceHandler {
         ToolSpec::Function(ResponsesApiTool {
             name: TOOL_NAME.to_string(),
             description: "Deterministically build the submission trace.jsonl from a real run.log. Run your computation first with its stdout captured to evidence/run.log, then call this once; it writes evidence/trace.jsonl that passes admission on the first attempt. Do NOT hand-write trace.jsonl.".to_string(),
-            strict: true,
+            // agnes-2.5-flash hangs forever on strict:true function schemas
+            // (probed 2026-09-02: strict=true never completes, strict=false
+            // returns instantly). deny_unknown_fields + required-path checks
+            // keep argument validation fail-closed.
+            strict: false,
             defer_loading: None,
             parameters: JsonSchema::object(
                 properties,

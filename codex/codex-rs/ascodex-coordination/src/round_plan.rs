@@ -87,8 +87,10 @@ impl RoundPlan {
                 return Err(invalid("challenge workspace roots must be unique within a round"));
             }
             let task_name = self.task_name_for(challenge);
-            if !valid_identifier(&task_name) {
-                return Err(invalid("task names must be path-safe identifiers"));
+            if !valid_task_name(&task_name) {
+                return Err(invalid(
+                    "task names must be lowercase letters, digits, and underscores only",
+                ));
             }
             if !task_names.insert(task_name) {
                 return Err(invalid("task names must be unique within a round"));
@@ -102,12 +104,24 @@ impl RoundPlan {
         Ok(())
     }
 
-    /// The effective task name for one challenge.
+    /// The effective task name for one challenge. Agent paths only accept
+    /// lowercase letters, digits, and underscores, so every non-conforming
+    /// character (e.g. the hyphen in `ch-01`) is mapped to `_`.
     pub fn task_name_for(&self, challenge: &RoundPlanChallenge) -> String {
-        challenge
-            .task_name
-            .clone()
-            .unwrap_or_else(|| format!("solver_{}", challenge.challenge_id))
+        challenge.task_name.clone().unwrap_or_else(|| {
+            let sanitized: String = challenge
+                .challenge_id
+                .bytes()
+                .map(|byte| {
+                    if byte.is_ascii_lowercase() || byte.is_ascii_digit() {
+                        byte as char
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            format!("solver_{sanitized}")
+        })
     }
 
     /// The effective task message for one challenge: the per-challenge message
@@ -129,6 +143,13 @@ fn valid_identifier(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
         && !value.starts_with('.')
         && !value.starts_with('-')
+}
+
+fn valid_task_name(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
 fn invalid(message: &str) -> CoordinationError {
@@ -171,7 +192,7 @@ mod tests {
             valid.message_for(&valid.challenges[0]),
             "solve ch-01 inside C:/ws/ch-01"
         );
-        assert_eq!(valid.task_name_for(&valid.challenges[1]), "solver_ch-02");
+        assert_eq!(valid.task_name_for(&valid.challenges[1]), "solver_ch_02");
     }
 
     #[test]

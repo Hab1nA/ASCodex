@@ -82,8 +82,10 @@ impl ToolExecutor<ToolInvocation> for SolverRoundDispatchHandler {
         )]);
         ToolSpec::Function(ResponsesApiTool {
             name: TOOL_NAME.to_string(),
-            description: "Dispatch one bohrium-solver child per challenge in the round plan, all at once. The plan file pins the challenge set, per-challenge Chief leases, workspaces, and the task template; this tool validates it fail-closed and spawns every solver deterministically. Do not call spawn_agent for round dispatch; call this once with the plan.".to_string(),
-            strict: true,
+            description: "Dispatch one solver child per challenge in the round plan, all at once. The plan file pins the challenge set, per-challenge Chief leases, workspaces, and the task template; this tool validates it fail-closed and spawns every solver deterministically. Do not call spawn_agent for round dispatch; call this once with the plan.".to_string(),
+            // strict:true hangs agnes-2.5-flash indefinitely; see the
+            // build_trace handler note and out/e2e/probe_strict_tool.py.
+            strict: false,
             defer_loading: None,
             parameters: JsonSchema::object(properties, Some(vec!["plan_path".to_string()]), Some(false.into())),
             output_schema: Some(json!({
