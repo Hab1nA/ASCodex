@@ -1,0 +1,78 @@
+{
+ "$id": "https://playground.agentic.science/schemas/trace-step/v1",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "description": "One row in a typed-step trace JSONL file. Used for anti-fraud verification: each tool_call must be matched by a tool_result; artifact steps must produce files that exist in the bundle with mtimes inside the run window.",
+ "properties": {
+  "artifact_id": {
+   "description": "For step_type=artifact: optional id matching execution.artifacts[].id.",
+   "type": "string"
+  },
+  "artifact_path": {
+   "description": "For step_type=artifact: path inside bundle. File must exist with mtime in run window.",
+   "type": "string"
+  },
+  "body": {
+   "type": "string"
+  },
+  "code": {
+   "type": "string"
+  },
+  "cost_usd": {
+   "minimum": 0,
+   "type": "number"
+  },
+  "duration_s": {
+   "minimum": 0,
+   "type": "number"
+  },
+  "step_order": {
+   "minimum": 1,
+   "type": "integer"
+  },
+  "step_type": {
+   "description": "Step kind. tool_call+tool_result must pair via tool_call_id.",
+   "enum": [
+    "thought",
+    "tool_call",
+    "tool_result",
+    "artifact",
+    "decision",
+    "error",
+    "observation"
+   ],
+   "type": "string"
+  },
+  "timestamp": {
+   "description": "ISO-8601. Must fall within execution.ran_at \u00b1 wall_time_s for anti-fraud verification.",
+   "format": "date-time",
+   "type": "string"
+  },
+  "title": {
+   "type": "string"
+  },
+  "tokens": {
+   "minimum": 0,
+   "type": "integer"
+  },
+  "tool_args": {
+   "description": "Arguments for tool_call.",
+   "type": "object"
+  },
+  "tool_call_id": {
+   "description": "Required for step_type=tool_call and tool_result; must pair.",
+   "type": "string"
+  },
+  "tool_name": {
+   "description": "Required for step_type=tool_call.",
+   "type": "string"
+  },
+  "tool_output": {
+   "description": "Output for tool_result; same call_id as the matching tool_call."
+  }
+ },
+ "required": [
+  "step_type"
+ ],
+ "title": "ARM Trace Step v1",
+ "type": "object"
+}

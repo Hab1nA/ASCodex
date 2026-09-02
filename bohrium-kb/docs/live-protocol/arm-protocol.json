@@ -1,0 +1,287 @@
+{
+ "accepted_versions": [
+  "1.0",
+  "1.1"
+ ],
+ "docs_url": "#docs/arm-bundles",
+ "expected_outputs": {
+  "legacy_link": "path: results/foo.png",
+  "note": "produced_by id-references are stable across path renames; legacy path-based linkage still works for v1.0.",
+  "preferred_link": "produced_by: [artifact_id, ...]"
+ },
+ "handoff": {
+  "attempt_outcome_enum": [
+   "success",
+   "partial",
+   "failed",
+   "stuck"
+  ],
+  "note": "Server-computed fields overwrite any user-supplied values on upload.",
+  "server_computed": [
+   "modality_coverage",
+   "deltas_from_parent"
+  ],
+  "status_enum": [
+   "stuck",
+   "partial",
+   "failed"
+  ],
+  "status_refused_by_enum": [
+   "complete"
+  ],
+  "status_rejected_by_schema": [
+   "success"
+  ],
+  "status_rejection": "A handoff.status the schema accepts but the outcome enum does not (see status_refused_by_enum) is refused on the value's own merits. The value never reaches attempt.outcome: an attempt without an outcome is left without one, and an attempt that already has one keeps it unchanged. The value is never truncated to the column width, and never mapped to a nearby accepted value. The raw string stays in the stored manifest, and the upload response carries a 'handoff_value_not_in_enum' violation -- for every upload that declares one, whatever the column already holds. A value the schema itself refuses (status_rejected_by_schema) fails manifest validation upstream of this, so no sync runs and no 'handoff_value_not_in_enum' violation is reported for it.",
+  "user_supplied": [
+   "status",
+   "stuck_at",
+   "next_suggestion",
+   "blocked_by",
+   "hypothesis",
+   "next_owner_hint",
+   "modality_notes"
+  ]
+ },
+ "metrics": {
+  "discouraged": [
+   "ssim"
+  ],
+  "enum": [
+   "relative_error",
+   "absolute_error",
+   "rmse",
+   "mean_abs_error",
+   "max_abs_error",
+   "l2_relative_norm",
+   "pearson_r",
+   "spearman_r",
+   "ks_statistic",
+   "kl_divergence",
+   "physical_consistency",
+   "exact_match",
+   "ssim",
+   "custom"
+  ],
+  "formulas": {
+   "absolute_error": "max(0, 1 - deviation/tolerance), tolerance default 1.0",
+   "custom": "requires verifier_script (relative to bundle root)",
+   "exact_match": "binary score, must be supplied",
+   "kl_divergence": "exp(-kl)",
+   "ks_statistic": "1 - ks",
+   "l2_relative_norm": "max(0, 1 - deviation/tolerance)",
+   "pearson_r": "(r + 1) / 2, clipped to [0, 1]",
+   "physical_consistency": "binary score, must be supplied",
+   "relative_error": "max(0, 1 - deviation/tolerance), tolerance default 0.1",
+   "rmse": "max(0, 1 - deviation/tolerance)",
+   "spearman_r": "(r + 1) / 2, clipped to [0, 1]",
+   "ssim": "score field as-is, capped at 0.3 contribution"
+  },
+  "guidance": "Prefer numerical metrics computed on actual values over visual similarity. Image shape is easy to fake; computational results are not. SSIM contributions are clipped to 0.3 in result_fidelity.",
+  "preferred_numerical": [
+   "relative_error",
+   "rmse",
+   "l2_relative_norm",
+   "pearson_r",
+   "ks_statistic",
+   "kl_divergence",
+   "physical_consistency"
+  ],
+  "ssim_cap": 0.3
+ },
+ "modalities": {
+  "all": [
+   "execution",
+   "skills",
+   "knowledge",
+   "rag",
+   "characterization",
+   "sub_agent",
+   "trace"
+  ],
+  "layout": {
+   "characterization": {
+    "paths": [
+     "characterization.json"
+    ],
+    "required": true
+   },
+   "execution": {
+    "paths": [
+     "src/reproduce.py",
+     "execution/run.log",
+     "execution/results/*"
+    ],
+    "required": true
+   },
+   "knowledge": {
+    "paths": [
+     "knowledge/claims.json"
+    ],
+    "required": false
+   },
+   "rag": {
+    "paths": [
+     "paper/paper.pdf",
+     "paper/chunks.json"
+    ],
+    "required": false
+   },
+   "skills": {
+    "paths": [
+     "skills/*.md"
+    ],
+    "required": false
+   },
+   "sub_agent": {
+    "paths": [
+     "sub_agent/persona.md"
+    ],
+    "required": false
+   },
+   "trace": {
+    "paths": [
+     "trace/trace.jsonl",
+     "traces/*.jsonl"
+    ],
+    "required": true
+   }
+  },
+  "required": [
+   "execution",
+   "characterization",
+   "trace"
+  ]
+ },
+ "name": "ARM Bundle Submission Protocol",
+ "reference_url": "docs/ARM_PROTOCOL_REFERENCE.md",
+ "schemas": {
+  "arm_manifest": "/api/schemas/arm-manifest/v1",
+  "characterization": "/api/schemas/characterization/v1",
+  "trace_step": "/api/schemas/trace-step/v1"
+ },
+ "scorecard": {
+  "dimensions": [
+   "packaging",
+   "executability",
+   "output_coverage",
+   "result_fidelity",
+   "environment_reproducibility",
+   "trace_quality"
+  ],
+  "output_coverage_formula": "|deviations.target \u2229 expected_outputs.name| / |expected_outputs|",
+  "result_fidelity_formula": "mean(deviations.score), with SSIM contributions clipped to 0.3 before averaging"
+ },
+ "status_machine": {
+  "needs_review_means": "Structurally complete, but held out of scoring pending a human: its trace cleared no admission signal, or could not be read in full. Not `incomplete` \u2014 no file is missing.",
+  "ready_requires": [
+   "required_modalities_ok = true",
+   "completeness >= 0.6",
+   "no validation errors",
+   "trace_admission.verdict != 'blocked' and != 'indeterminate', unless an operator released it (trace_admission.overridden_by_admin = true, set by allow_unadmitted_trace on the admin recompute endpoint)"
+  ],
+  "states": [
+   "draft",
+   "packaging",
+   "incomplete",
+   "ready",
+   "needs_review",
+   "verified",
+   "failed"
+  ]
+ },
+ "submission_endpoint": "POST /api/attempts/{id}/bundle",
+ "tooling": {
+  "recorder": {
+   "commands": [
+    "init",
+    "list-sessions",
+    "convert",
+    "validate"
+   ],
+   "install": "git clone <repo> && cd tools/trace-record && bash install.sh",
+   "modes": {
+    "live": "PostToolUse hooks (Claude Code) / plugin (OpenCode) / git pre-commit (Cursor) / post-tool hook (OpenClaw) emit ARM steps as you work.",
+    "post_hoc": "Convert an existing native session log to trace.jsonl with `trace-record convert --tool auto --in <session>`."
+   },
+   "name": "trace-record",
+   "preflight": "Run `trace-record validate trace/trace.jsonl` before bundling \u2014 mirrors the server checks above.",
+   "purpose": "Produce ARM v1.1 compliant trace/trace.jsonl from native session logs of common agentic IDEs/CLIs.",
+   "supports": [
+    "claude_code",
+    "opencode",
+    "cursor",
+    "openclaw"
+   ]
+  }
+ },
+ "trace_anti_fraud": {
+  "admission": {
+   "fail_closed": "A trace the checker cannot read in full is `indeterminate` and held, not admitted.",
+   "not_a_fraud_verdict": "Each signal is individually cheap to fake. Clearing admission is not a finding that the trace is honest \u2014 that judgement belongs to the conviction layer, not to this gate.",
+   "purpose": "Floor for entering scoring at all, separate from the score above. A trace clearing no signal below does not reach `ready`; the bundle goes to `needs_review`.",
+   "signals": [
+    "log_anchor",
+    "artifact_path",
+    "paired_tool_calls",
+    "declared_cost",
+    "timeline",
+    "substance"
+   ],
+   "signals_required": 1,
+   "thresholds": {
+    "declared_cost_usd": 0.01,
+    "log_anchor_fields": [
+     "body",
+     "title",
+     "tool_output"
+    ],
+    "log_anchor_max_chars": 80,
+    "log_anchor_min_chars": 12,
+    "substance_distinct_step_types": 2,
+    "substance_narrative_chars": 30,
+    "substance_narrative_fields": [
+     "title",
+     "body",
+     "code"
+    ],
+    "substance_typed_steps": 2,
+    "timeline_distinct_timestamps": 2
+   },
+   "verdicts": [
+    "admit",
+    "blocked",
+    "indeterminate",
+    "not_applicable"
+   ]
+  },
+  "checks": [
+   {
+    "description": "Every step must declare step_type in {thought,tool_call,tool_result,artifact,decision,error,observation}.",
+    "id": "typed_step_type"
+   },
+   {
+    "description": "Each tool_call must have a matching tool_result with the same tool_call_id.",
+    "id": "tool_call_pairing"
+   },
+   {
+    "description": "Step timestamps must fall within execution.ran_at \u00b1 wall_time_s.",
+    "id": "timestamp_window"
+   },
+   {
+    "description": "Step_type=artifact rows must reference paths that exist in the bundle.",
+    "id": "artifact_existence"
+   },
+   {
+    "description": "Total cost_usd must clear a 0.01 floor.",
+    "id": "cost_floor"
+   },
+   {
+    "description": "At least one step body must be greppable (substring) in execution/run.log.",
+    "id": "stdout_anchor"
+   }
+  ],
+  "scoring": "Each check contributes 0.2 to trace_quality (max 1.0)."
+ },
+ "version": "1.1"
+}

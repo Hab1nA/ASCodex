@@ -1,0 +1,168 @@
+{
+ "$id": "https://playground.agentic.science/schemas/characterization/v1",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "description": "Per-paper characterization profile: empirical envelope, failure modes, deviations from paper, parameter sensitivity. This is the file that hackathon graders read to assign result_fidelity and output_coverage scores.",
+ "properties": {
+  "deviations_from_paper": {
+   "description": "Quantitative comparison of reproduction outputs against the paper's reported values. THIS IS THE PRIMARY GRADING SIGNAL \u2014 every paper target should appear here.",
+   "items": {
+    "properties": {
+     "actual_value": {
+      "description": "What the reproduction produced. Number, array, object, or string depending on metric."
+     },
+     "evidence_artifact": {
+      "description": "Artifact id (from execution.artifacts[].id) backing this deviation.",
+      "type": "string"
+     },
+     "explanation": {
+      "description": "Human-readable rationale, especially for non-trivial metrics.",
+      "type": "string"
+     },
+     "metric": {
+      "description": "PREFER NUMERICAL METRICS over visual ones. ssim only acceptable when no scalar/array result is recoverable; max contribution capped at 0.3 in result_fidelity. Use relative_error for scalars, rmse / l2_relative_norm for arrays/curves, pearson_r for correlation-shaped claims, ks_statistic / kl_divergence for distributions, physical_consistency for domain-rule checks (energy conservation, mass balance, etc.).",
+      "enum": [
+       "relative_error",
+       "absolute_error",
+       "rmse",
+       "mean_abs_error",
+       "max_abs_error",
+       "l2_relative_norm",
+       "pearson_r",
+       "spearman_r",
+       "ks_statistic",
+       "kl_divergence",
+       "physical_consistency",
+       "exact_match",
+       "ssim",
+       "custom"
+      ],
+      "type": "string"
+     },
+     "reference_value": {
+      "description": "What the paper reports. Same shape as actual_value."
+     },
+     "score": {
+      "description": "Normalised match score derived from metric. 1.0 = matches paper exactly; 0.0 = unrelated. See ARM_PROTOCOL_REFERENCE.md \u00a7Metric Score Derivation for per-metric formulas.",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "target": {
+      "description": "Logical name matching expected_outputs[*].name (e.g. 'Figure 2a', 'Table 1 row 3', 'CIFAR-10 accuracy').",
+      "type": "string"
+     },
+     "tolerance": {
+      "description": "Threshold below which score=1.0 (interpretation depends on metric).",
+      "type": "number"
+     },
+     "verifier_script": {
+      "description": "Optional path to a script (relative to bundle root) that recomputes score from artifact + reference. Required when metric='custom' or 'physical_consistency'.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "target",
+     "metric",
+     "actual_value",
+     "reference_value",
+     "score"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "envelope": {
+   "description": "Operating envelope: parameter ranges over which the reproduction was tested and remained valid.",
+   "items": {
+    "properties": {
+     "max": {
+      "type": "number"
+     },
+     "min": {
+      "type": "number"
+     },
+     "param": {
+      "description": "Parameter name (e.g. 'temperature', 'lr', 'mesh_resolution').",
+      "type": "string"
+     },
+     "tested": {
+      "default": false,
+      "description": "Whether the bound was empirically probed (true) or only declared (false).",
+      "type": "boolean"
+     },
+     "unit": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "param"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "failure_modes": {
+   "description": "Conditions under which the reproduction breaks. Each entry MUST cite at least one piece of evidence (trace file or artifact id).",
+   "items": {
+    "properties": {
+     "condition": {
+      "description": "When does it break? (e.g. 'lr > 5e-3', 'mesh < 32x32').",
+      "type": "string"
+     },
+     "evidence_artifact": {
+      "description": "Artifact id (from execution.artifacts[].id) demonstrating the failure.",
+      "type": "string"
+     },
+     "evidence_trace": {
+      "description": "Path to a trace file inside bundle that captured the failure.",
+      "type": "string"
+     },
+     "symptom": {
+      "description": "What goes wrong? (e.g. 'loss diverges at step 200').",
+      "type": "string"
+     }
+    },
+    "required": [
+     "condition",
+     "symptom"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "sensitivity": {
+   "description": "Parameter sensitivity sweeps \u2014 which knobs change which outcomes, and by how much.",
+   "items": {
+    "properties": {
+     "evidence_trace": {
+      "description": "Trace file capturing the sweep.",
+      "type": "string"
+     },
+     "outcome_metric": {
+      "description": "Which deviation metric is being tracked.",
+      "type": "string"
+     },
+     "outcome_range": {
+      "description": "e.g. '0.65..0.81'.",
+      "type": "string"
+     },
+     "param": {
+      "type": "string"
+     },
+     "range": {
+      "description": "e.g. '1e-5..5e-4'.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "param",
+     "outcome_metric"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  }
+ },
+ "title": "ARM Characterization v1",
+ "type": "object"
+}

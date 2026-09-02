@@ -1,0 +1,670 @@
+{
+ "$defs": {
+  "modalityEntry": {
+   "description": "Per-modality fill status. Authoritative status is computed by the server from bundle file scan; users may add a free-form note.",
+   "properties": {
+    "files": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "note": {
+     "type": "string"
+    },
+    "status": {
+     "enum": [
+      "complete",
+      "partial",
+      "todo",
+      "failed"
+     ],
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "modalityName": {
+   "enum": [
+    "execution",
+    "skills",
+    "knowledge",
+    "rag",
+    "characterization",
+    "sub_agent",
+    "trace"
+   ],
+   "type": "string"
+  }
+ },
+ "$id": "https://playground.agentic.science/schemas/arm-manifest/v1",
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "description": "Agent Ready Manuscript manifest \u2014 machine-readable contract for reproducible scientific artifacts. v1.1 adds the `execution` block (recording actual run evidence: log + exit_code + artifacts), the per-modality `handoff.modality_coverage` (server-computed) and `handoff.next_owner_hint` (user-supplied), and references the per-paper Characterization sub-schema. v1.0 manifests remain valid; the new fields are optional but required for hackathon `ready` status.",
+ "properties": {
+  "agents_used": {
+   "items": {
+    "properties": {
+     "agent_id": {
+      "type": "string"
+     },
+     "role": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "agent_id"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "arm_version": {
+   "description": "Schema version. 1.0 = legacy (pre-7-modality). 1.1 = current (adds execution block + handoff modality fields).",
+   "enum": [
+    "1.0",
+    "1.1"
+   ],
+   "type": "string"
+  },
+  "characterization": {
+   "description": "Inline characterization profile or pointer. For substantial profiles, place at bundle root as `characterization.json` and set `path` here. Schema: characterization-v1.schema.json.",
+   "properties": {
+    "deviations_from_paper": {
+     "type": "array"
+    },
+    "envelope": {
+     "type": "array"
+    },
+    "failure_modes": {
+     "type": "array"
+    },
+    "path": {
+     "description": "Path inside bundle, e.g. 'characterization.json'.",
+     "type": "string"
+    },
+    "sensitivity": {
+     "type": "array"
+    }
+   },
+   "type": [
+    "object",
+    "string"
+   ]
+  },
+  "data_sources": {
+   "items": {
+    "properties": {
+     "checksum": {
+      "type": "string"
+     },
+     "dataset_id": {
+      "type": "string"
+     },
+     "license": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "size_bytes": {
+      "type": "integer"
+     },
+     "uri": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "entrypoint": {
+   "description": "Main script to run reproduction (e.g. 'src/reproduce.py').",
+   "type": "string"
+  },
+  "entrypoint_args": {
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
+  "environment": {
+   "properties": {
+    "dependencies": {
+     "type": "string"
+    },
+    "docker_image": {
+     "type": "string"
+    },
+    "estimated_runtime_minutes": {
+     "type": "number"
+    },
+    "extra_packages": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "gpu_required": {
+     "default": false,
+     "type": "boolean"
+    },
+    "lock_file": {
+     "type": "string"
+    },
+    "python_version": {
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "execution": {
+   "description": "Evidence of an actual run. REQUIRED for hackathon `ready` status (arm_version >= 1.1). The artifacts list is the source of truth for what was produced; expected_outputs[].produced_by references entries here by id.",
+   "properties": {
+    "artifacts": {
+     "description": "Concrete output files produced by the run.",
+     "items": {
+      "properties": {
+       "checksum_sha256": {
+        "type": "string"
+       },
+       "format": {
+        "enum": [
+         "png",
+         "jpg",
+         "pdf",
+         "svg",
+         "csv",
+         "tsv",
+         "json",
+         "npy",
+         "npz",
+         "h5",
+         "parquet",
+         "txt",
+         "other"
+        ],
+        "type": "string"
+       },
+       "id": {
+        "description": "Stable identifier referenced from expected_outputs[].produced_by and characterization deviations.",
+        "type": "string"
+       },
+       "path": {
+        "description": "Path inside bundle.",
+        "type": "string"
+       },
+       "shape": {
+        "description": "For arrays: tensor shape.",
+        "items": {
+         "type": "integer"
+        },
+        "type": "array"
+       },
+       "type": {
+        "enum": [
+         "figure",
+         "table",
+         "metric",
+         "array",
+         "data",
+         "log",
+         "checkpoint",
+         "scalar"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "id",
+       "path",
+       "type"
+      ],
+      "type": "object"
+     },
+     "minItems": 1,
+     "type": "array"
+    },
+    "exit_code": {
+     "description": "Process exit code.",
+     "type": "integer"
+    },
+    "log_path": {
+     "description": "Path to stdout/stderr capture (e.g. 'results/run.log'). File must exist and be non-empty.",
+     "type": "string"
+    },
+    "ran_at": {
+     "description": "ISO-8601 start time of the run.",
+     "format": "date-time",
+     "type": "string"
+    },
+    "ran_by": {
+     "description": "Who ran it (e.g. 'agent:flame-solver-v3', 'human:alice').",
+     "type": "string"
+    },
+    "wall_time_s": {
+     "description": "Wall-clock runtime in seconds; bounds the trace timestamp window.",
+     "minimum": 0,
+     "type": "number"
+    }
+   },
+   "required": [
+    "log_path",
+    "artifacts"
+   ],
+   "type": "object"
+  },
+  "expected_outputs": {
+   "description": "What the reproduction is supposed to produce. v1.1: prefer `produced_by` (artifact id reference). v1.0: `path` is still accepted for backward compatibility.",
+   "items": {
+    "properties": {
+     "comparison_method": {
+      "description": "Hint for grader. PREFER numeric metrics. visual_similarity (SSIM) only for figure-only outputs with no recoverable scalar/array data.",
+      "enum": [
+       "numeric_tolerance",
+       "rmse",
+       "relative_error",
+       "json_diff",
+       "exact_match",
+       "visual_similarity",
+       "custom"
+      ],
+      "type": "string"
+     },
+     "expected_value": {
+      "description": "Expected scalar/object value for metric-type outputs."
+     },
+     "name": {
+      "description": "Human label matching characterization.deviations_from_paper[].target.",
+      "type": "string"
+     },
+     "path": {
+      "description": "v1.0 legacy. Direct path; will be matched against artifacts by path if produced_by is absent.",
+      "type": "string"
+     },
+     "produced_by": {
+      "description": "v1.1+. Artifact ids (from execution.artifacts[].id) realising this output. One target may map to many artifacts (e.g. fig + raw npy).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "reference": {
+      "description": "Path inside bundle to reference output (paper figure / golden values).",
+      "type": "string"
+     },
+     "tolerance": {
+      "type": "number"
+     },
+     "type": {
+      "enum": [
+       "figure",
+       "table",
+       "metric",
+       "array",
+       "data",
+       "log",
+       "checkpoint"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "type"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "handoff": {
+   "description": "Agent-to-agent handoff protocol. v1 fields describe attempt-level state; v1.1 adds per-modality coverage and next-owner hint. Authoritative `modality_coverage` is computed by the server from bundle file scan and injected at upload time \u2014 fields written here by the user are advisory only and overwritten.",
+   "properties": {
+    "blocked_by": {
+     "type": "string"
+    },
+    "deltas_from_parent": {
+     "description": "What this drop added relative to parent attempt. SERVER-COMPUTED via file diff against parent bundle.",
+     "items": {
+      "properties": {
+       "added": {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "modality": {
+        "$ref": "#/$defs/modalityName"
+       },
+       "note": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "modality"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    },
+    "hypothesis": {
+     "type": "string"
+    },
+    "modality_coverage": {
+     "additionalProperties": false,
+     "description": "Per-modality fill status. SERVER-COMPUTED at upload time. User input here is overwritten.",
+     "properties": {
+      "characterization": {
+       "$ref": "#/$defs/modalityEntry"
+      },
+      "execution": {
+       "$ref": "#/$defs/modalityEntry"
+      },
+      "knowledge": {
+       "$ref": "#/$defs/modalityEntry"
+      },
+      "rag": {
+       "$ref": "#/$defs/modalityEntry"
+      },
+      "skills": {
+       "$ref": "#/$defs/modalityEntry"
+      },
+      "sub_agent": {
+       "$ref": "#/$defs/modalityEntry"
+      },
+      "trace": {
+       "$ref": "#/$defs/modalityEntry"
+      }
+     },
+     "type": "object"
+    },
+    "modality_notes": {
+     "additionalProperties": false,
+     "description": "User-supplied free-form notes per modality (not affecting validation).",
+     "properties": {
+      "characterization": {
+       "type": "string"
+      },
+      "execution": {
+       "type": "string"
+      },
+      "knowledge": {
+       "type": "string"
+      },
+      "rag": {
+       "type": "string"
+      },
+      "skills": {
+       "type": "string"
+      },
+      "sub_agent": {
+       "type": "string"
+      },
+      "trace": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "next_owner_hint": {
+     "description": "User-supplied hint to next agent: which modality to fill next, by whom, and why.",
+     "properties": {
+      "modality": {
+       "$ref": "#/$defs/modalityName"
+      },
+      "rationale": {
+       "type": "string"
+      },
+      "suggested_role": {
+       "description": "e.g. 'any-agent', 'characterization-specialist', 'human'.",
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "next_suggestion": {
+     "type": "string"
+    },
+    "status": {
+     "enum": [
+      "complete",
+      "stuck",
+      "partial",
+      "failed"
+     ],
+     "type": "string"
+    },
+    "stuck_at": {
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "knowledge": {
+   "description": "Pointer to formal claim list. Schema TBD (flat-v1 \u2192 gaia-hypergraph-v1).",
+   "properties": {
+    "claim_count": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "claims_path": {
+     "type": "string"
+    },
+    "format": {
+     "enum": [
+      "flat-v1",
+      "gaia-hypergraph-v1"
+     ],
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "paper": {
+   "properties": {
+    "authors": {
+     "type": "string"
+    },
+    "challenge_id": {
+     "description": "Playground challenge slug, if linked.",
+     "type": "string"
+    },
+    "doi": {
+     "type": "string"
+    },
+    "journal": {
+     "type": "string"
+    },
+    "target_claims": {
+     "description": "Specific quantitative claims to verify (e.g. 'Accuracy > 92% on CIFAR-10').",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "target_figures": {
+     "description": "Paper figure labels targeted for reproduction (e.g. ['Fig2a', 'Fig3']).",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "target_tables": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "title": {
+     "type": "string"
+    },
+    "year": {
+     "type": "integer"
+    }
+   },
+   "required": [
+    "title"
+   ],
+   "type": "object"
+  },
+  "provenance": {
+   "properties": {
+    "attempt_id": {
+     "type": "integer"
+    },
+    "created_by": {
+     "enum": [
+      "human",
+      "agent",
+      "mixed"
+     ],
+     "type": "string"
+    },
+    "imported_from": {
+     "type": "string"
+    },
+    "parent_attempt_id": {
+     "type": "integer"
+    },
+    "platform": {
+     "type": "string"
+    },
+    "series_id": {
+     "type": "integer"
+    },
+    "toolchain": {
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "rag": {
+   "description": "RAG modality: paper full text + chunked index for execution-time retrieval.",
+   "properties": {
+    "chunk_count": {
+     "minimum": 0,
+     "type": "integer"
+    },
+    "chunks_path": {
+     "type": "string"
+    },
+    "paper_pdf": {
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "scorecard": {
+   "description": "Multi-dimensional reproduction quality scorecard. SERVER-COMPUTED on bundle upload + grading; user-supplied values are advisory.",
+   "properties": {
+    "environment_reproducibility": {
+     "maximum": 1,
+     "minimum": 0,
+     "type": "number"
+    },
+    "executability": {
+     "maximum": 1,
+     "minimum": 0,
+     "type": "number"
+    },
+    "output_coverage": {
+     "maximum": 1,
+     "minimum": 0,
+     "type": "number"
+    },
+    "packaging": {
+     "maximum": 1,
+     "minimum": 0,
+     "type": "number"
+    },
+    "result_fidelity": {
+     "maximum": 1,
+     "minimum": 0,
+     "type": "number"
+    },
+    "rqs_grade": {
+     "type": "string"
+    },
+    "rqs_total": {
+     "type": "number"
+    },
+    "trace_quality": {
+     "maximum": 1,
+     "minimum": 0,
+     "type": "number"
+    }
+   },
+   "type": "object"
+  },
+  "skills_used": {
+   "items": {
+    "properties": {
+     "parameters": {
+      "type": "object"
+     },
+     "skill_id": {
+      "type": "string"
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "skill_id"
+    ],
+    "type": "object"
+   },
+   "type": "array"
+  },
+  "sub_agent": {
+   "description": "Paper-specific persona for lazy instantiation.",
+   "properties": {
+    "instantiation": {
+     "enum": [
+      "lazy",
+      "eager"
+     ],
+     "type": "string"
+    },
+    "persona_path": {
+     "type": "string"
+    },
+    "scope": {
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "trace": {
+   "description": "Trace modality pointer. Trace files (typed-step JSONL) live in `traces/`. Schema: trace-step-v1.schema.json.",
+   "properties": {
+    "files": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "step_count": {
+     "minimum": 0,
+     "type": "integer"
+    }
+   },
+   "type": [
+    "object",
+    "string"
+   ]
+  }
+ },
+ "required": [
+  "arm_version",
+  "paper",
+  "entrypoint"
+ ],
+ "title": "ARM Manifest v1",
+ "type": "object"
+}

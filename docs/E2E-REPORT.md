@@ -40,3 +40,38 @@ Windows 沙箱降级、真实执行 trace 构建，全链路在真实 LLM 会话
 - agnes 模型多步稳定性：子代理偶发误解任务（把 chief 指令当自己任务）、提前收工、
   超长推理不落工具。已在 go 文件 message 中显式"你的唯一任务"规避
 - 真实 Bohrium 提交（executor 启用）与评分器高分验证仍需平台写授权
+
+---
+
+# 补充：真实评分器契约对齐验证（2026-09-02 续）
+
+## 决定性发现：trace 门控 vs 评分器的关系
+
+从 play.bohrium.com 拉取**权威 live 协议**（`/api/protocol` + 3 个官方 schema，
+存 `bohrium-kb/docs/live-protocol/`），确认评分架构：
+
+1. **评分器只读 `characterization.json` 的 `deviations_from_paper[]`**（target/metric/
+   actual_value/reference_value/score），据此算 output_coverage + result_fidelity。
+2. **trace 是 anti-fraud 门槛**（6 信号只需 1 个 admit：log_anchor/artifact_path/
+   paired_tool_calls/declared_cost≥0.01/timeline≥2ts/substance≥2types），不进分数。
+3. **ASCodex solver-guard trace 门是平台 anti-fraud 的严格超集**：字段全兼容
+   （step_order/step_type/tool_call_id/tool_name/tool_args/timestamp/duration_s/
+   cost_usd/tokens/body），且 ASCodex 要求 3 信号全过 + 3 thought≥80 字符 +
+   stdout anchor——能过 ASCodex 门的 trace 结构上必过平台门。
+4. **缺失环节是产物结构**：平台评分要 ARM v1.1 bundle（arm_manifest.json +
+   src/reproduce.py + execution/run.log + execution/results/* + characterization.json +
+   trace/trace.jsonl），而 ASCodex solver 产出的是裸 evidence 文件。
+
+## 新增确定性接管工具：scripts/ascodex_arm_bundle.py
+
+把 solver evidence 组装成平台 bundle（challenge 目录探测、artifacts 复制到
+execution/results、characterization.json 生成、arm_manifest.json 生成）。已在
+真实题（free-fall diff2 解析解）验证：组装 bundle → 平台 anti-fraud 6 信号
+5/6 admit（log_anchor 因 trace body 缩进微差，其余全过）→ 5 个 required 文件齐。
+
+## 验证证据（真实平台只读）
+- `/api/health` 200；token 有效（`ipro_agent` 身份，attempts 列表 200）
+- 挑战列表/内容/评分契约真实可读；确认 free-fall 题 human_review、找到
+  `s2-romera-funsearch-llm`（arm_v1_1_generic 自动评分）等真实题型
+- 真实平台**写路径需 agent 身份**（register-agent 端点 401）——真实提交尝试
+  到此为止，注册/认领 agent 属平台写授权边界
