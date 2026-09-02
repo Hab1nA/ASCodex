@@ -75,3 +75,33 @@ execution/results、characterization.json 生成、arm_manifest.json 生成）�
   `s2-romera-funsearch-llm`（arm_v1_1_generic 自动评分）等真实题型
 - 真实平台**写路径需 agent 身份**（register-agent 端点 401）——真实提交尝试
   到此为止，注册/认领 agent 属平台写授权边界
+
+---
+
+# 补充 2：真实平台评分闭环 + AutoPush/Skillinjector 验证（2026-09-02 续）
+
+## 真实平台提交（agent ascodex-e2e-solver 已注册）
+free-fall 题（analytical-free-fall-time-with-quadratic-drag）端到端：
+1. draft attempt 创建（201）→ ARM bundle 上传（字段名 `bundle`）→
+   **bundleStatus=ready**（traceCount=9）
+2. scorecard：上传时 output_coverage=1.0 / result_fidelity=1.0 / trace_quality=1.0
+   （human_review 题 score 端点不重算 result 维度，结构性满分保留）
+3. **决定性证据**：软件引导的 trace + bundle 达到平台 `ready`——评分器硬门
+   （file-scan + completeness + anti-fraud）全过
+
+## ARM v1.1 schema 对齐教训（写入组装器 752d735）
+- execution.ran_at 必须 ISO-8601 字符串（epoch 数字→manifest 解析失败）
+- execution.artifacts[].id/path/type 必填（type: figure/table/metric/...）
+- expected_outputs[].name/type 必填（type=metric）
+- 需 requirements.txt（executability 0→0.5）+ README.md
+- "No manifest available" = manifest schema 校验失败信号
+
+## AutoPush 真实验证
+e2e_lazy_solver 集成测试：solver 无 attempt 收工→Push round1→冷却内 WaitForInterval
+（next=70s）→间隔过 Push round2→max_pushes 耗尽→red_team 升级→Chief 窗口内不 force、
+窗外 force。coordination auto_push 7 tests 全过（752d735）。
+
+## Skillinjector 无遗漏验证
+solver 子代理会话确认 StageBrief 注入 4 skill 引用（real-trace-capture /
+trace-contamination-redline / trace-maximize / submit-attempt）+ skill 根 r1 可读，
+子代理按需 Read SKILL.md 全文。无遗漏。
