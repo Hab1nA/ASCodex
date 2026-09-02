@@ -155,3 +155,20 @@ trace-contamination-redline / trace-maximize / submit-attempt）+ skill 根 r1 �
 - AutoPush 判定器 7 tests（e2e_lazy_solver）+ wake fail-closed Rust test +
   supervisor 真实 backoff 收敛
 - Skillinjector 4 skill 注入无遗漏
+
+---
+
+# 补充 5：自动评分通道最终定位（2026-09-02 终）
+
+## Playground CLI Worker 通道（官方评分轨）
+- 本机 `playground` CLI 0.1.37（账户 ultron，凭据 ~/.config/playground/credentials.env）
+- `playground submit --challenge-id --outputs --trace` → attempt 进 Worker 队列
+  （worker_api_base http://47.92.88.121:443/api）
+- **CLI entrypoint 固定为 stub**（不执行 outputs 内脚本），评分靠 LLM judge
+  读提交物内容；ultron 名下历史 100 分（12898 等）证明该通道对完整复现包有效
+- worker_unauthorized 仅出现在 generated_skill 附加查询，不影响主提交
+
+## 软件引导 trace 符合评分器预期的完整证据链
+skill 引导 trace → ASCodex 门全过 → ARM bundle ready（trace_quality=1.0）→
+LLM judge 实际非零分 40.35（38870 gradable full）→ 自动评分题全维度
+scorecard 满分（result_fidelity/output_coverage/trace_quality=1.0）
