@@ -1082,7 +1082,7 @@ fn canonical_channel_probe_path(
     let candidate = if supplied.is_absolute() {
         supplied.to_path_buf()
     } else {
-        workspace.join(supplied)
+        join_relative_evidence_path(workspace, supplied)
     };
     let canonical = candidate.canonicalize()?;
     if !canonical.starts_with(workspace) || !canonical.is_file() {
@@ -1328,7 +1328,7 @@ fn canonical_redline_path(
     let candidate = if supplied.is_absolute() {
         supplied.to_path_buf()
     } else {
-        workspace.join(supplied)
+        join_relative_evidence_path(workspace, supplied)
     };
     let canonical = candidate.canonicalize()?;
     if !canonical.starts_with(workspace) || !canonical.is_file() {
@@ -1371,6 +1371,16 @@ fn contains_attempt_number(text: &str) -> bool {
     false
 }
 
+/// Joins a workspace-relative evidence path onto an already-canonicalized
+/// workspace. On Windows `fs::canonicalize` returns a `\\?\` verbatim path,
+/// and verbatim paths skip Win32 normalization: forward separators inside the
+/// relative part would then collapse into one bogus component (os error 3).
+/// Normalize every separator to the platform separator before joining.
+fn join_relative_evidence_path(workspace: &Path, supplied: &Path) -> PathBuf {
+    let relative = supplied.to_string_lossy().replace('/', std::path::MAIN_SEPARATOR_STR);
+    workspace.join(relative)
+}
+
 fn canonical_evidence_path(
     workspace: &Path,
     supplied: &Path,
@@ -1378,7 +1388,7 @@ fn canonical_evidence_path(
     let candidate = if supplied.is_absolute() {
         supplied.to_path_buf()
     } else {
-        workspace.join(supplied)
+        join_relative_evidence_path(workspace, supplied)
     };
     let canonical = candidate.canonicalize()?;
     if !canonical.starts_with(workspace) || !canonical.is_file() {
@@ -1396,7 +1406,7 @@ fn canonical_directory_path(
     let candidate = if supplied.is_absolute() {
         supplied.to_path_buf()
     } else {
-        workspace.join(supplied)
+        join_relative_evidence_path(workspace, supplied)
     };
     let canonical = candidate.canonicalize()?;
     if !canonical.starts_with(workspace) || !canonical.is_dir() {
@@ -1679,7 +1689,7 @@ fn validate_trace_artifact_refs(
                     "artifact trace step requires artifact_path".to_string(),
                 )
             })?;
-        let candidate = trace_dir.join(raw).canonicalize()?;
+        let candidate = join_relative_evidence_path(trace_dir, Path::new(raw)).canonicalize()?;
         if !artifacts.contains_key(&candidate) {
             return Err(TraceValidationError::Invalid(format!(
                 "trace artifact is absent from the verified manifest: {raw}"

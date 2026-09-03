@@ -34,6 +34,12 @@ struct BuildTraceArgs {
     artifact_path: String,
     /// Short human description of the computation.
     problem: String,
+    /// Challenge id for the channel probe evidence.
+    challenge_id: String,
+    /// Submission-root-relative prefix of this challenge (e.g. `ch-01`).
+    artifact_prefix: String,
+    /// Real measured wall time of the entrypoint run in milliseconds (> 0).
+    wall_time_ms: i64,
 }
 
 struct BuildTraceOutput {
@@ -74,10 +80,27 @@ impl ToolExecutor<ToolInvocation> for BuildTraceHandler {
             ("entrypoint".to_string(), JsonSchema::string(None)),
             ("artifact_path".to_string(), JsonSchema::string(None)),
             ("problem".to_string(), JsonSchema::string(None)),
+            (
+                "challenge_id".to_string(),
+                JsonSchema::string(Some("Challenge id for the channel probe evidence.".to_string())),
+            ),
+            (
+                "artifact_prefix".to_string(),
+                JsonSchema::string(Some(
+                    "Submission-root-relative prefix of this challenge, e.g. `ch-01`.".to_string(),
+                )),
+            ),
+            (
+                "wall_time_ms".to_string(),
+                JsonSchema::integer(Some(
+                    "Real measured wall time of the entrypoint run in milliseconds (> 0)."
+                        .to_string(),
+                )),
+            ),
         ]);
         ToolSpec::Function(ResponsesApiTool {
             name: TOOL_NAME.to_string(),
-            description: "Deterministically build the submission trace.jsonl from a real run.log. Run your computation first with its stdout captured to evidence/run.log, then call this once; it writes evidence/trace.jsonl that passes admission on the first attempt. Do NOT hand-write trace.jsonl.".to_string(),
+            description: "Deterministically build the FULL submission evidence bundle from a real run.log: evidence/trace.jsonl, evidence/artifacts.json, evidence/execution.json (bound to your live session identity), and evidence/channel-probe.json. Run your computation first with its stdout captured to evidence/run.log, measure its wall time, then call this once. Do NOT hand-write any of these files.".to_string(),
             // agnes-2.5-flash hangs forever on strict:true function schemas
             // (probed 2026-09-02: strict=true never completes, strict=false
             // returns instantly). deny_unknown_fields + required-path checks
@@ -92,6 +115,9 @@ impl ToolExecutor<ToolInvocation> for BuildTraceHandler {
                     "entrypoint".to_string(),
                     "artifact_path".to_string(),
                     "problem".to_string(),
+                    "challenge_id".to_string(),
+                    "artifact_prefix".to_string(),
+                    "wall_time_ms".to_string(),
                 ]),
                 Some(false.into()),
             ),
@@ -125,12 +151,21 @@ impl ToolExecutor<ToolInvocation> for BuildTraceHandler {
                     }));
                 }
             };
+            let session_id = invocation.session.session_id().to_string();
+            let agent_id = invocation.session.thread_id.to_string();
             let request = TraceBuildRequest {
                 workspace: Path::new(&args.workspace),
                 run_log_path: Path::new(&args.run_log_path),
                 entrypoint: &args.entrypoint,
                 artifact_path: &args.artifact_path,
                 problem: &args.problem,
+                // The execution manifest is bound to the live invocation, so
+                // the submit-time session/agent match check cannot fail.
+                session_id: &session_id,
+                agent_id: &agent_id,
+                challenge_id: &args.challenge_id,
+                artifact_prefix: &args.artifact_prefix,
+                wall_time_ms: args.wall_time_ms,
             };
             match build_trace_from_runlog(&request) {
                 Ok(built) => Ok(boxed_tool_output(BuildTraceOutput {
@@ -140,6 +175,18 @@ impl ToolExecutor<ToolInvocation> for BuildTraceHandler {
                         "step_count": built.step_count,
                         "anchor_body": built.anchor_body,
                         "trace_sha256": built.trace_sha256,
+                        "artifacts_manifest_path": built
+                            .artifacts_manifest_path
+                            .as_ref()
+                            .map(|path| path.display().to_string()),
+                        "execution_manifest_path": built
+                            .execution_manifest_path
+                            .as_ref()
+                            .map(|path| path.display().to_string()),
+                        "channel_probe_path": built
+                            .channel_probe_path
+                            .as_ref()
+                            .map(|path| path.display().to_string()),
                     })
                     .to_string(),
                     success: true,
