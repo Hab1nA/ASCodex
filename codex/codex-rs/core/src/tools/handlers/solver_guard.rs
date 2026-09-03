@@ -367,6 +367,18 @@ impl SolverGuardSubmitHandler {
             .unwrap_or_default();
         let identity_class =
             resolve_field(&args.identity_class, "", "ASCODEX_IDENTITY_CLASS", &identity_class_default);
+        // Channel is a security-sensitive constant: a model-supplied argument
+        // must never be able to pick a non-Harbor route. The policy pins it.
+        if let Some(supplied) = non_empty(args.channel.clone())
+            && !supplied.eq_ignore_ascii_case("harbor")
+        {
+            return json!({
+                "allowed": false,
+                "status": "blocked",
+                "dry_run": true,
+                "reason": format!("channel must be `harbor`, got `{supplied}`"),
+            });
+        }
         let channel = resolve_field(&args.channel, "", "ASCODEX_CHANNEL", "harbor");
         let provider = resolve_field(&args.provider, "", "ASCODEX_MODEL_PROVIDER", &policy.model.provider);
         let model = resolve_field(&args.model, "", "ASCODEX_MODEL", &policy.model.model);

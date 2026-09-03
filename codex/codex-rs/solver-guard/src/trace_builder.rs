@@ -81,11 +81,6 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn ts(offset_s: i64) -> String {
-    (Utc::now() + chrono::Duration::seconds(offset_s))
-        .to_rfc3339_opts(SecondsFormat::Secs, true)
-}
-
 fn canonical(path: &Path, workspace: &Path) -> Result<PathBuf, String> {
     let candidate = if path.is_absolute() {
         path.to_path_buf()
@@ -168,6 +163,27 @@ pub fn build_trace_from_runlog(req: &TraceBuildRequest<'_>) -> Result<BuiltTrace
 
     let mut steps: Vec<Value> = Vec::new();
     let mut order = 0usize;
+
+    // The admission gate validates that every trace timestamp falls inside the
+    // execution window anchored at the run.log mtime (±5 min). Build timestamps
+    // relative to that anchor instead of `Utc::now()`: the model may run the
+    // computation and only call this tool minutes later, which would push the
+    // trace outside the window.
+    let run_anchor_ms = fs::metadata(&run_log)
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(|modified| {
+            modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|duration| duration.as_millis() as i64)
+        })
+        .unwrap_or_else(|| Utc::now().timestamp_millis());
+    let ts = |offset_s: i64| {
+        chrono::DateTime::from_timestamp_millis(run_anchor_ms + offset_s * 1000)
+            .unwrap_or_else(Utc::now)
+            .to_rfc3339_opts(SecondsFormat::Secs, true)
+    };
 
     let mut emit = |step: Value| -> Result<(), String> {
         order += 1;
