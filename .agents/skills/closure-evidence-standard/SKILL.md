@@ -27,7 +27,7 @@ tags: [bohrium-playground, closure, stop-loss, ceiling, evidence]
 - [ ] **曾达更高值记录**：grep 本地/REPORT 有无更高值（07 有 −16.7 记录 → 天花板论直接错误）
 - [ ] **反推复现过**：是否精确反推该更高值的配置（网络/采样/objective/优化器）并本地复现命中？（07：train_impt.py importance 采样 |ψ_GS|² 才是关键，非三层 FCNN 架构）
 - [ ] **采样 regime 共享遗漏**：多方法触顶是否因**共享同一采样假设**（都从自身 |ψ|² 或 uniform），漏了不同采样 regime？
-- [ ] **判分器两轨确认**：是否确认判分器真不接数值？"No per-challenge grader"不导向——必须通过当前题面与只读 live 证据核对 ARM/worker 路径；`worker-submit-chain` 在 Codex 中不可用。
+- [ ] **判分器两轨确认**：是否确认判分器真不接数值？"No per-challenge grader"不导向——必须通过当前题面与只读 live 证据核对 ARM/worker 路径；`worker-submit-chain` 在 Codex/ZCode 中均不可用，ZCode 唯一提交通道 = `work/_template/submit_bundle.py` + 仓库提交门钩子。
 - [ ] **止损口径**：练习轮按**额度见底**收口，不按时间/回合止损（"跑了 N 小时"不是封板理由）。
 
 ## 封板条件（全部满足才可封板）
@@ -47,7 +47,7 @@ tags: [bohrium-playground, closure, stop-loss, ceiling, evidence]
 
 - `unstuck-switch-angle` = 卡死时换角度（封板是换角度的终点判定：多轴证伪后才封，否则继续换角度）。
 - 两轨确认只能记录为待验证假设；不得把不存在的 `worker-submit-chain` 当作已启用能力。
-- `competition-coordinate` = 总负责人裁决流程（封板结论进决策日志，标 ⚠ 可重测）。
+- `competition-coordinate` = 总负责人裁决流程（封板结论进决策日志，标 ⚠ 可重测；ZCode 单会话模式下由解题会话自行裁决并记录）。
 
 ## 实证
 

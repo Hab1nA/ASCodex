@@ -54,3 +54,6 @@ codex/codex-rs/target*/
 **/undo-snapshots/
 .mimosa/
 .video_agent/
+
+# ZCode solve-session runtime state (user-created, never committed)
+work/**/.submit-authorized

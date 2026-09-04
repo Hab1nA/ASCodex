@@ -8,6 +8,8 @@ tags: [bohrium-playground, coordination, multi-agent, orchestration]
 
 # 多代理协调作战手册（总负责人视角）
 
+> **ZCode 模式注记（2026-09-04）**：当前工作模式为"一题一会话"单会话解题（见 `ascodex-solve`），不存在总负责人与解题子代理，本手册的派活/换人/监控编排**不适用**，仅作历史多代理协作参考；身份配额纪律与决策日志条款仍可沿用。
+
 ## Codex 安全适配
 
 Codex 的代理接口是 `collaboration.spawn_agent`、`collaboration.followup_task`、`collaboration.send_message` 和 `collaboration.wait_threads`；没有 DSH 的 `subagent_send`、`subagent_queue` 或 steer/cancel_first 参数。飞书 hook 仅在已连接的 Lark 工具可用时启用，否则标记为不可用。决策日志写入用户明确指定的 `bohrium-kb/round3_prep/DECISION_LOG.md`，不写入 `.claude/memory/`。

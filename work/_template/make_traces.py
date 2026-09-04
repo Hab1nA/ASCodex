@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Generic trace generator for an ARM bundle.
 
+⚠⚠⚠ 红线警告（trace-contamination-redline / real-trace-capture）⚠⚠⚠
+本文件只是 trace.jsonl 的 **schema 参考模板**，不是可用生成器。
+真实提交的 trace 必须从真实执行记录（会话记录 / execution/run.log）转录，
+脚本合成/补写 trace 属于伪造证据：trace_check.py 会拒绝，提交门与平台
+审计会判 trace_quality=0。永远不要把本文件的输出直接用于提交。
+
 Adapt CHALLENGE_ID, TITLE and the TRACE_STEPS list to the actual work done.
 Keeps the anti-fraud requirements: step_type enum, tool_call/tool_result
 pairing, artifact existence, cost lower bound, stdout anchor.

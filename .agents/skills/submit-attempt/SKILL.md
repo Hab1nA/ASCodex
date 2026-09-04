@@ -9,7 +9,7 @@ metadata:
 
 ## Codex 安全适配
 
-本技能在 Codex 中只负责发现产物、生成 manifest 和本地 dry-run。不得直接执行文中的 curl、POST、score 或 legacy worker 链；当前 Codex 没有 `solver-guard_build-submit`。真实提交必须由用户明确授权，并先运行 `bohrium-kb/tools/submit_gate_audit.py`。提交后只读核对必须绑定当前 bundle revision/hash，并区分 replay、`resultsJson`、scorecard、raw/effective score、判罚、credited owner、fresh rescore 与榜单 scope。凭据只能来自当前进程的 `PLAYGROUND_TOKEN`，禁止从文件回退或打印。
+本技能在 Codex 中只负责发现产物、生成 manifest 和本地 dry-run。不得直接执行文中的 curl、POST、score 或 legacy worker 链；当前 Codex 没有 `solver-guard_build-submit`。真实提交必须由用户明确授权，并先运行 `bohrium-kb/tools/submit_gate_audit.py`。在 ZCode 中，仓库钩子 `.zcode/hooks/submit-gate.js` 会在没有 `work/<slug>/.submit-authorized` 授权文件（用户手工创建，内容 = 允许提交次数）时硬拦截提交命令；提交流程见 `ascodex-solve` 技能。提交后只读核对必须绑定当前 bundle revision/hash，并区分 replay、`resultsJson`、scorecard、raw/effective score、判罚、credited owner、fresh rescore 与榜单 scope。凭据只能来自当前进程的 `PLAYGROUND_TOKEN`，禁止从文件回退或打印。
 
 # Submit Attempt (ARM Bundle)
 
@@ -77,20 +77,13 @@ Trace step types: `thought`, `tool_call`, `tool_result`, `artifact`, `decision`,
 
 Every bundle build must produce and locally record an immutable content hash plus a monotonically distinct revision identifier. A rebuilt or re-uploaded bundle is a new scoring subject even when it belongs to the same attempt.
 
-Do not execute the historical command examples below in Codex. Use only `submit_gate_audit.py`; the examples are retained for provenance and contain direct network-write operations.
+Do not execute the historical command examples below in Codex/ZCode. Use only `submit_gate_audit.py` for audit and `work/_template/submit_bundle.py` as the sole authorized submit executor (gated by the repo submit-gate hook); the examples are retained for provenance and contain direct network-write operations.
 
 ```bash
-python3 .claude/skills/submit-attempt/scripts/submit.py \
-  --challenge-id chen-2011-cnf-158 \
-  --figures output/fig2.png:2 output/fig5.png:5 \
-  --fig-errors 2:0.015 5:0.034 \
-  --script reproduce_chen2011.py \
+python3 work/_template/submit_bundle.py \
+  --challenge chen-2011-cnf-158 \
   --method "Cantera 3.0 + GRI-Mech 3.0" \
-  --outcome partial \
-  --type agent \
-  --trace trace.json \
-  --skill-ids reproduce-paper \
-  --score
+  --outcome partial
 ```
 
 **Historical Harness flow (not executable from Codex):**

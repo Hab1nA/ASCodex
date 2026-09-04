@@ -152,7 +152,7 @@ bohr update           # 更新 bohr 到最新版
 
 1. **ckpt 每 N 步存盘 + backward_files 回传**：训练脚本每 N 步保存 checkpoint 到固定文件名；`backward_files` 列 ckpt+log，job 结束后自动回传，本地保留接力起点。
 2. **job 接力**：先跑 30-40k 步验证曲线，再续 50k/100k（07 实证：23228405 止损 → 23228699 importance 长训破壁 0.171@4k）；续跑 job 从上一段 ckpt 加载，不从头训。
-3. **monitor 必须可恢复**：Codex 使用 `functions.exec_command` 的会话与 `functions.wait`/`write_stdin` 检查长任务；不假设 DSH 的 `run_in_background` 存在，状态变化和日志路径必须可见。
+3. **monitor 必须可恢复**：ZCode/Codex 用 shell 工具提交 job 后，以轮询脚本与日志文件检查长任务（用户级 bohrium-job 技能自带 `poll_jobs.py`；后台运行可用 `run_in_background` 但状态与日志路径必须落盘可见），会话中断后按日志恢复 monitor。
    - Running → 重启 monitor 继续盯；
    - Finished → 直接 `bohr job download -j <id>`。
 4. **kill 语法**：`bohr job kill <id>`（positional，非 `-j`）；**kill 仅额度见底或用户裁决**，不因"时间止损"杀 job（练习轮按额度止损，见 `closure-evidence-standard`）。

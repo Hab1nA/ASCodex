@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash|Write|Edit",
+          "hooks": [
+            {
+              "type": "process",
+              "command": "node",
+              "args": ["${ZCODE_PROJECT_DIR}/.zcode/hooks/submit-gate.js"],
+              "timeoutMs": 10000,
+              "statusMessage": "ascodex 提交门检查..."
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "process",
+              "command": "node",
+              "args": ["${ZCODE_PROJECT_DIR}/.zcode/hooks/solve-prompt-inject.js"],
+              "timeoutMs": 10000,
+              "statusMessage": "ascodex 解题上下文检查..."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

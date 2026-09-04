@@ -8,9 +8,9 @@ tags: [bohrium-playground, red-team, adversarial, clean-room, validation]
 
 # /red-team-review — Adversarial Validation
 
-## Codex 安全适配
+## Codex/ZCode 安全适配
 
-使用 `collaboration.spawn_agent` 创建隔离的 clean-room 复核，不读取旧 REPORT、判词或分数，不自动提交。文件读取/实验使用 `functions.exec_command`，结果只写入用户明确指定的工作区；任何平台写操作必须另行授权并先通过六门 dry-run 审计。
+ZCode 单会话模式下没有可 spawn 的子代理：在本会话内以 clean-room 纪律执行复核（不复用既有实现、不读旧 REPORT/判词/分数），或建议用户另开一个会话承担红队角色。文件读取/实验用 shell 工具，结果只写入用户明确指定的工作区；任何平台写操作必须另行授权并先通过提交门（`.zcode/hooks/submit-gate.js` + `work/<slug>/.submit-authorized`）。
 
 Run an adversarial review on a computational result. Spawns the Red Team agent to hunt for errors: unit mismatches, model/data bugs, numerical artifacts, comparison methodology issues. Returns ranked failure modes with cheapest discriminating tests.
 
@@ -21,7 +21,7 @@ User mentions: "red team", "validate", "check for errors", "falsify", "what coul
 ## Workflow
 
 1. **Gather context**: Collect the result to be reviewed — input parameters, method, output, comparison figure, independent reference used.
-2. **Spawn Red Team agent**: Use `collaboration.spawn_agent` with the clean-room boundaries in `agents/codex-roles/bohrium-red-team.md`.
+2. **执行 Red Team 复核**：ZCode 单会话模式下在本会话内按 `agents/codex-roles/bohrium-red-team.md` 的 clean-room 边界执行（从零重写、不读旧报告）；需要强隔离时请用户另开会话承担红队角色。
 3. **Present findings**: Ranked failure modes, category audit table, cheapest discriminating test.
 
 ## Clean-room 独立参考协议（本地全对但判官丢时的决定性手段）
