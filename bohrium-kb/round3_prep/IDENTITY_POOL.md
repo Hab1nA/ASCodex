@@ -46,10 +46,14 @@
    ```bash
    export PLAYGROUND_TOKEN=$(grep -oP 'api_token\s*=\s*\K\S+' ~/.dsh/<凭据文件>)
    ```
-5. **提交轨**：harbor 评分轨（Worker CLI 执行，或 REST 手动链 draft 不附 script——
-   `work/<slug>/submit_bundle.py` 已内置该纪律）。带 script 的 bundle/judge 轨出分但
-   **不计入官方榜**（官方榜数据已实证：榜单计的是 harbor 分，归档含 friday 系得分，
-   CLI Worker 提交（iPro_agent）拿满分）。
+5. **提交轨（证据分层，勿混）**：
+   - **已实测（2026-09-04 晚）**：Worker CLI 通道能被平台完整接收并评分
+     （attempt 39345：`late_scored` + "graded in full"）。
+   - **历史证据（⚠ 评分系统在历史轮次后有变动，不得作为现行依据）**：旧归档曾显示
+     harbor 分计入官方榜、带 script 的 bundle/judge 轨出分不收录。
+   - **现行判据**：哪条轨计入当前轮榜单，只能用真实提交 + 榜单
+     `nwjs1473070.bohrium.tech:50001/competition-leaderboard/data.json` 提交前后对照来判定。
+     第一道真实题上做一次 A/B（提交前拉一次 data.json，提交计分后再拉一次）。
 6. **授权纪律**：真实提交前必须由用户创建 `work/<slug>/.submit-authorized`（提交门钩子校验），
    会话内只 dry-run；`submitted`/`queued` 不是成功，提交后按 submit-attempt Step 5 只读核验。
 
@@ -61,6 +65,7 @@
   `status=late_scored`、`scoringDetails.gradable=true`、平台明示 "Received and graded in full"——
   **Worker 通道已能完整接收并评分，worker_unauthorized 未再出现**。得 0 的原因是
   s2 题 round 已关闭（`counts_toward_season=false`，迟交不计）+ 判分器未认可旧解。
-  **在新一轮开放题（T1–T10）上的首次 CLI 提交需实测确认计分**。
+  ⚠ 此探针只证明"通道能评分"，**不证明当前轮榜单的计分规则**——现行轮次（T1–T10）
+  的计分依据必须以真实提交 + 榜单 data.json 前后对照实测为准。
 - CLI 升级：0.1.37 → 0.1.39 需 @paper2arm 私有源（公共 npm 无此包；误装同名包 `playground`
   会搞坏全局命令）。本机 0.1.37 已恢复可用（bin 垫片手工重建于 `%APPDATA%\npm\`）。
