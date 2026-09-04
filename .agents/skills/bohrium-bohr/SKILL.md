@@ -33,7 +33,8 @@ bohr（Bohrium CLI）是深势科技（DeepModeling）官方的命令行工具�
   或用 `~/.bohrium/bohr.ps1` 包装脚本自动加载。
 - **默认项目**：`System-created default project`，ID `1185008`（另一个：LLM科研课堂 2025秋 = 1106774）
 - **机型参考**：CPU 从 `c2_m2_cpu`（2核2G）到 `c32_m64_cpu`（32核64G）多档可选；
-  GPU 机型用 `bohr machine list -c "gpu" --yaml` 查询。**选型原则：按题目需要选，不挑最便宜的**
+  GPU 机型用 `bohr machine list -c "gpu" --yaml` 查询；A100_80g 仅 job 场景提供 1/2/4/8 卡四档，
+  交互式节点（node 场景）没有 A100。**选型原则：按题目需要选，不挑最便宜的**
 - **基础镜像**：`registry.dp.tech/dptech/ubuntu:ubuntu24.04-py3.12`（CPU，Python 3.12）、
   `registry.dp.tech/dptech/ubuntu:22.04-py3.10`（CPU）；学科镜像：DeePMD-kit/ABACUS/CP2K/LAMMPS/GROMACS/Quantum Espresso/Uni-Mol/Amber 等（`bohr image list -t "类别名"`）
 - **端到端已验证**：提交 → Pending → 运行 → 结果下载 全流程通过（bohrium-kb/tools/bohr-smoke/ 下有冒烟作业模板）
