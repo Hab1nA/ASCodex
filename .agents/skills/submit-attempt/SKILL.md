@@ -9,7 +9,7 @@ metadata:
 
 ## Codex 安全适配
 
-本技能在 Codex 中只负责发现产物、生成 manifest 和本地 dry-run。不得直接执行文中的 curl、POST、score 或 legacy worker 链；当前 Codex 没有 `solver-guard_build-submit`。真实提交必须由用户明确授权，并先运行 `bohrium-kb/tools/submit_gate_audit.py`。在 ZCode 中，仓库钩子 `.zcode/hooks/submit-gate.js` 会在没有 `work/<slug>/.submit-authorized` 授权文件（用户手工创建，内容 = 允许提交次数）时硬拦截提交命令；提交流程见 `ascodex-solve` 技能。提交后只读核对必须绑定当前 bundle revision/hash，并区分 replay、`resultsJson`、scorecard、raw/effective score、判罚、credited owner、fresh rescore 与榜单 scope。凭据只能来自当前进程的 `PLAYGROUND_TOKEN`，禁止从文件回退或打印。
+本技能只负责发现产物、生成 manifest 和本地 dry-run。不得直接执行文中的 curl、POST、score 或 legacy worker 链；不存在 `solver-guard_build-submit`。真实提交必须由用户明确授权，并先运行 `bohrium-kb/tools/submit_gate_audit.py`。在 ZCode 中，仓库钩子 `.zcode/hooks/submit-gate.js` 会在没有 `work/<slug>/.submit-authorized` 授权文件（用户手工创建，内容 = 允许提交次数）时硬拦截提交命令；提交流程见 `ascodex-solve` 技能。提交后只读核对必须绑定当前 bundle revision/hash，并区分 replay、`resultsJson`、scorecard、raw/effective score、判罚、credited owner、fresh rescore 与榜单 scope。凭据只能来自当前进程的 `PLAYGROUND_TOKEN`，禁止从文件回退或打印。
 
 # Submit Attempt (ARM Bundle)
 
@@ -73,7 +73,7 @@ Priority:
 
 Trace step types: `thought`, `tool_call`, `tool_result`, `artifact`, `decision`, `error`, `observation`
 
-## Step 4 — Prepare ARM Bundle (dry-run only in Codex)
+## Step 4 — Prepare ARM Bundle（本地构建 + dry-run）
 
 Every bundle build must produce and locally record an immutable content hash plus a monotonically distinct revision identifier. A rebuilt or re-uploaded bundle is a new scoring subject even when it belongs to the same attempt.
 
@@ -125,7 +125,7 @@ Uploads figures as loose multipart form data, like the pre-ARM pipeline.
 
 ## Step 5 — Score and Report
 
-Codex 不触发评分 POST。只有在用户明确授权并完成六门审计后，才可由单独的执行层处理。ARM bundle 重传后，旧评分立即标记 `stale_for_current_bundle`；不得沿用上一个包的结论，必须等待当前 revision/hash 的 fresh rescore。
+解码会话不触发评分 POST。只有在用户明确授权并完成提交门审计后，才可由 `work/<slug>/submit_bundle.py` 处理。ARM bundle 重传后，旧评分立即标记 `stale_for_current_bundle`；不得沿用上一个包的结论，必须等待当前 revision/hash 的 fresh rescore。
 
 只读核验至少包括：
 

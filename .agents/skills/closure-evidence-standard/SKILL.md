@@ -12,7 +12,7 @@ tags: [bohrium-playground, closure, stop-loss, ceiling, evidence]
 
 ## When to Use
 
-- solver 建议收关/封板/止损时（**总负责人裁决前强制核对此清单**）
+- solver 建议收关/封板/止损时（**单会话模式下由解题会话自行强制核对此清单并向用户陈述**）
 - 出现"结构性不可达""天花板""封顶"类结论时
 - 练习轮/无时间压力的赛段收口时
 

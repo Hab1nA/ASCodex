@@ -60,7 +60,7 @@ LLM judge 审计的是 transcript：**"在这个 transcript 里，能看到交�
 
 - `trace-maximize` = "如何拿 trace 高分"（本技能是"什么绝对不能进"的前置门）。
 - `real-trace-capture` = 真实执行史捕获（真实做工作的 transcript 天然自洽，污染风险最低）。
-- OPERATIONS_PLAYBOOK §9.1 = 本技能的手册级条款（派活模板与 solver persona 引用）。
+- OPERATIONS_PLAYBOOK §9.1 = 本技能的手册级条款（历史多代理手册；ZCode 单会话模式下只取其红线条款，派活/persona 编排不适用）。
 
 ## 实证
 

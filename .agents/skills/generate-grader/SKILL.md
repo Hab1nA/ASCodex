@@ -5,6 +5,8 @@ description: "Read a hackathon topic markdown file, extract scoring criteria and
 
 # /generate-grader — Hackathon Topic → Programmatic Grader
 
+> **ZCode 注记（2026-09-04）**：本技能面向**源项目的评分服务源码**（`server/services/hackathon_scoring.py`），该路径在当前仓库不存在，平台判分器也不由我们维护——解题会话**不要**用本技能去"改判分器"；自建 verifier 走 `ascodex-solve` 开场六步。仅当用户明确要求做离线评分器工程时，把输出目标改为用户指定目录。
+
 Read a hackathon topic markdown, extract its scoring criteria and reference values, and generate a complete grader function that plugs into the existing scoring engine.
 
 ## Context

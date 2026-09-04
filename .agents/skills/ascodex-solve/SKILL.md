@@ -66,6 +66,8 @@ metadata:
 
 ## 6. 专项技能索引
 
+> **历史数字免责**：各专项技能中的历史编号/attempt id/分数（如 29180、81.875、harbor 0.8092）均为**往轮实证记录**，仅佐证方法论——不是现行目标、现行规则，更不是可调用工具；现行规则以现行评分契约与 live 探测为准。
+
 战术总纲 `playground-solve-optimal`｜判分器 `platform-scorecard-analyze`｜高分未满定位 `differential-scoring` + `judge-field-audit` + `oracle-probe`｜云算力 `bohrium-bohr`（重型计算走 Bohrium job，本地只做 ≤120s smoke）｜mp-r 同家族题 `mp-r-family-solve`｜长任务断点 `checkpoint`/`resume`。多代理协作 `competition-coordinate` 在单会话模式下不适用。
 
 ## 7. 本迁移明确不包含的原 ASCodex 运行时组件

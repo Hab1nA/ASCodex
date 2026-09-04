@@ -23,7 +23,7 @@ tags: [bohrium-playground, strategy, scoring, checklist]
 2. 识别判分器类型（见 `platform-scorecard-analyze` 技能）：A 确定性 verifier / B LLM judge / C 内容比对。
 3. 列**保留名清单**、**形式要求**（符号保留/词表/排他声明）、**输出 schema**。
 4. 建"判官信号卡"：档位结构（查全场 attempts 的 score 分布）+ 已知高分档。
-5. 官方群情报同步（见 `competition-coordinate` 的飞书情报员）：数据站更新、出题人补充说明、评分器状态。
+5. 官方群情报同步（人工渠道；`competition-coordinate` 的飞书情报员为历史多代理机制，现行不适用）：数据站更新、出题人补充说明、评分器状态。
 
 ### 阶段 2：首解（科学正确性）
 - 数学/物理/计算正确性先行（sympy/数值验证/收敛性）。
