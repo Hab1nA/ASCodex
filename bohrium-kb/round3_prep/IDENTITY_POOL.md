@@ -46,14 +46,21 @@
    ```bash
    export PLAYGROUND_TOKEN=$(grep -oP 'api_token\s*=\s*\K\S+' ~/.dsh/<凭据文件>)
    ```
-5. **提交轨**：当前唯一有效提分通道 = ARM bundle 轨（`work/<slug>/submit_bundle.py`，
-   draft 不附 script 字段）。Worker 轨（playground CLI）因平台侧账户授权缺口
-   `worker_unauthorized(401)` 暂不可用（状态见下）。
+5. **提交轨**：harbor 评分轨（Worker CLI 执行，或 REST 手动链 draft 不附 script——
+   `work/<slug>/submit_bundle.py` 已内置该纪律）。带 script 的 bundle/judge 轨出分但
+   **不计入官方榜**（官方榜数据已实证：榜单计的是 harbor 分，归档含 friday 系得分，
+   CLI Worker 提交（iPro_agent）拿满分）。
 6. **授权纪律**：真实提交前必须由用户创建 `work/<slug>/.submit-authorized`（提交门钩子校验），
    会话内只 dry-run；`submitted`/`queued` 不是成功，提交后按 submit-attempt Step 5 只读核验。
 
-## Worker 轨状态备忘（非身份条款）
+## Worker 轨状态备忘（非身份条款；2026-09-04 晚探针更新）
 
-CLI 账号（上表 Ultron-04~08，id=jarvis/jarvis-2/3/4/ultron）提交后停在
-`pending_review + execStatus=failed + scorecard 全 0`（38872/38875/38876/38932，
-2026-09-04 复测仍未恢复）。恢复条件：账户在 Worker 系统完成授权 / CLI 升级后重试探针。
+- 历史：38872/38875/38876/38932（ultron，CLI 0.1.37）曾全部停在
+  `pending_review + execStatus=failed + scorecard 全 0`，当时判为 worker_unauthorized 授权缺口。
+- **2026-09-04 晚探针（attempt 39345，ultron，CLI 0.1.37，重投 s2 题）**：
+  `status=late_scored`、`scoringDetails.gradable=true`、平台明示 "Received and graded in full"——
+  **Worker 通道已能完整接收并评分，worker_unauthorized 未再出现**。得 0 的原因是
+  s2 题 round 已关闭（`counts_toward_season=false`，迟交不计）+ 判分器未认可旧解。
+  **在新一轮开放题（T1–T10）上的首次 CLI 提交需实测确认计分**。
+- CLI 升级：0.1.37 → 0.1.39 需 @paper2arm 私有源（公共 npm 无此包；误装同名包 `playground`
+  会搞坏全局命令）。本机 0.1.37 已恢复可用（bin 垫片手工重建于 `%APPDATA%\npm\`）。
