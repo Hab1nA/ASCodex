@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
-"""Generic ARM v1.1 bundle submission for one challenge.
+"""ARM v1.1 bundle submission for one challenge (ZCode single-session track).
 
-Usage: python submit_bundle.py --challenge <id> [--method "..." ] [--outcome success|partial|stuck|failed] [--stuck-at "..."] [--skill-ids '["..."]']
+Usage:
+  python submit_bundle.py --challenge <id> [--dry-run]
+                          [--method "..."] [--outcome success|partial|failed|stuck]
+                          [--stuck-at "..."] [--skill-ids '["..."]']
 
-Reads BOHRIUM_TOKEN from the current process only. Assumes the standard
-bundle layout in the current directory: src/reproduce.py, outputs/, trace/,
-characterization.json, arm_manifest.json, ...
+Track alignment (bohrium-kb/round3_prep/SCORING_TRUTH.md 方式 B / harbor 轨):
+draft attempt is created WITHOUT the `script` field — attaching it switches the
+attempt to the bundle/judge track whose scores are not collected by the official
+leaderboard. reproduce.py ships inside the bundle zip regardless.
+
+Credentials: PLAYGROUND_TOKEN first, BOHRIUM_TOKEN as documented fallback,
+current process environment only. Model/harness provenance defaults to
+ASCODEX_MODEL / ASCODEX_HARNESS env ("unspecified" when absent) — never leave
+historical defaults in a submission.
 """
 from __future__ import annotations
 
@@ -20,27 +29,38 @@ from pathlib import Path
 import requests
 
 BASE = os.environ.get("BOHRIUM_BASE", "https://play.bohrium.com/api")
-TOKEN = os.environ.get("BOHRIUM_TOKEN")
+TOKEN = os.environ.get("PLAYGROUND_TOKEN") or os.environ.get("BOHRIUM_TOKEN")
+
+EXCLUDE_FILES = {"submit_bundle.py", "make_traces.py", "redline_scan.py",
+                 "trace_check.py", "redline_terms.txt"}
+EXCLUDE_DIRS = {"__pycache__", ".git", "diagnostics"}
 
 
-def build_zip(bundle_dir: Path, exclude: set[str]) -> bytes:
+def build_zip(bundle_dir: Path) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for p in sorted(bundle_dir.rglob("*")):
-            if p.is_file() and p.name not in exclude:
-                z.write(p, p.relative_to(bundle_dir).as_posix())
+            if not p.is_file() or p.name.startswith("."):
+                continue
+            if p.name in EXCLUDE_FILES:
+                continue
+            rel_parts = set(p.relative_to(bundle_dir).parts[:-1])
+            if rel_parts & EXCLUDE_DIRS:
+                continue
+            z.write(p, p.relative_to(bundle_dir).as_posix())
     return buf.getvalue()
 
 
 def main() -> None:
-    if not TOKEN:
-        raise SystemExit("BOHRIUM_TOKEN is required in the current process; no credential fallback is permitted")
-    headers = {"Authorization": f"Bearer {TOKEN}"}
     ap = argparse.ArgumentParser()
     ap.add_argument("--challenge", required=True)
+    ap.add_argument("--dry-run", action="store_true",
+                    help="build the bundle and print its member list; no network, no token needed")
     ap.add_argument("--method", default="Reproduction via ARM v1.1 bundle")
-    ap.add_argument("--model", default="DeepSeek-V4")
-    ap.add_argument("--harness", default="DeepSeek Harness")
+    ap.add_argument("--model", default=None,
+                    help="defaults to $ASCODEX_MODEL (else 'unspecified'); must reflect the real session model")
+    ap.add_argument("--harness", default=None,
+                    help="defaults to $ASCODEX_HARNESS (else 'unspecified')")
     ap.add_argument("--outcome", default="success",
                     choices=["success", "partial", "failed", "stuck"])
     ap.add_argument("--stuck-at", default="")
@@ -53,12 +73,36 @@ def main() -> None:
     trace_steps = []
     if trace_path.exists():
         trace_steps = [json.loads(line) for line in
-                       trace_path.read_text(encoding="utf-8").splitlines()]
+                       trace_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    if not trace_steps:
+        raise SystemExit(
+            "FAIL-CLOSED: trace/trace.jsonl 缺失或为空——无 trace 不入待评队列，"
+            "禁止提交。先按 real-trace-capture 转录真实执行并跑 trace_check.py 全绿。")
+
+    bundle = build_zip(bundle_dir)
+    members = zipfile.ZipFile(io.BytesIO(bundle)).namelist()
+    print(f"bundle members ({len(members)}):")
+    for name in members:
+        print(f"  {name}")
+    print("提醒：arm_manifest.json 的 execution.ran_at/wall_time_s 必须是真实运行时间窗，"
+          "trace 时间戳须落在窗内；handoff.status 不接受 'complete'。")
+
+    if args.dry_run:
+        print("DRY-RUN OK：未联网、未消耗提交授权。")
+        return
+
+    if not TOKEN:
+        raise SystemExit("PLAYGROUND_TOKEN（或 BOHRIUM_TOKEN）必须在当前进程环境中；禁止文件回退")
+
+    model = args.model or os.environ.get("ASCODEX_MODEL", "unspecified")
+    harness = args.harness or os.environ.get("ASCODEX_HARNESS", "unspecified")
+    headers = {"Authorization": f"Bearer {TOKEN}"}
 
     data = {
         "method": args.method,
-        "model": args.model,
-        "harness": args.harness,
+        "model": model,
+        "harness": harness,
         "type": "agent",
         "status": "draft",
         "outcome": args.outcome,
@@ -67,14 +111,10 @@ def main() -> None:
         "agent_ids": args.agent_ids,
         "trace": json.dumps(trace_steps),
     }
-    files = {}
-    if (bundle_dir / "src" / "reproduce.py").exists():
-        files["script"] = ("reproduce.py",
-                           (bundle_dir / "src" / "reproduce.py").open("rb"))
 
-    print(f"[1/4] creating draft attempt for {args.challenge} ...")
+    print(f"[1/4] creating draft attempt for {args.challenge} (no script field -> harbor track) ...")
     r = requests.post(f"{BASE}/challenges/{args.challenge}/attempts",
-                      headers=headers, data=data, files=files or None, timeout=120)
+                      headers=headers, data=data, timeout=120)
     if r.status_code >= 400:
         print(f"FAILED: {r.status_code} {r.text[:600]}")
         sys.exit(1)
@@ -83,7 +123,6 @@ def main() -> None:
     print(f"   attempt id = {aid}")
 
     print("[2/4] uploading ARM bundle ...")
-    bundle = build_zip(bundle_dir, {"submit_bundle.py", "make_traces.py"})
     print(f"   bundle size = {len(bundle)} bytes")
     r = requests.post(f"{BASE}/attempts/{aid}/bundle", headers=headers,
                       files={"bundle": ("bundle.zip", bundle, "application/zip")},
@@ -102,6 +141,8 @@ def main() -> None:
     print(f"   score: {r.status_code} {r.text[:600]}")
 
     print(f"\nDONE. attempt_id={aid}")
+    print("submitted/queued 不是成功：按 submit-attempt Step 5 只读核实"
+          "replay/resultsJson/scorecard/credited owner/fresh rescore。")
     print(f"view: https://play.bohrium.com/#challenge/{args.challenge}/attempts")
 
 

@@ -14,7 +14,8 @@ metadata:
 ## 0. 模式与硬约束（先读）
 
 - **单会话**：不 spawn 解题子代理。需要红队/clean-room 视角时按 `unstuck-switch-angle` 在会话内换角度执行，或建议用户另开会话。
-- **提交门（仓库钩子硬拦截，非自觉约束）**：针对 `play.bohrium.com` 的写命令与 `submit_bundle.py` 上传会被 `.zcode/hooks/submit-gate.js` 拦截，除非 `work/<slug>/.submit-authorized` 存在——该文件由**用户手工**在会话外创建，首个非空行 = 本次允许提交次数 N，每次放行扣 1，扣尽即拦；`work/` 下必须恰好一个授权文件。`--dry-run` 与 `bohrium-kb/tools/submit_gate_audit.py` 审计不受限。**禁止创建/写入/删除/读取该授权文件**（钩子会拒绝一切触及它的模型操作）；要查剩余次数就问用户。
+- **提交门（仓库钩子硬拦截，非自觉约束）**：针对 `play.bohrium.com` 的写命令与 `submit_bundle.py` 上传会被 `.zcode/hooks/submit-gate.js` 拦截，除非对应题目的 `work/<slug>/.submit-authorized` 存在——该文件由**用户手工**在会话外创建，首个非空行 = 本次允许提交次数 N，每次放行原子扣 1，扣尽即拦。slug 从提交命令里的 `work/<slug>/` 路径或会话 cwd 解析；解析不出且 `work/` 下有多个授权文件时拒绝（防跨题误扣，多会话并行互不干扰）。`--dry-run`（仅纯 submit_bundle.py 调用）与 `bohrium-kb/tools/submit_gate_audit.py` 审计不受限。**禁止创建/写入/删除/读取该授权文件**（钩子会拒绝一切触及它的模型操作）；要查剩余次数就问用户。
+- **模型口径**：提交时 `--model`/`--harness` 必须如实反映当次会话（submit_bundle.py 默认从环境变量 `ASCODEX_MODEL`/`ASCODEX_HARNESS` 读取，缺省 "unspecified"），禁止沿用历史默认值（如 DeepSeek）。
 - **凭据**：只用进程环境变量 `PLAYGROUND_TOKEN` / `BOHRIUM_TOKEN`；禁止写入文件、prompt 或打印。
 - **默认 dry-run**：无授权文件时只允许只读 GET 与本地计算。
 
@@ -22,9 +23,9 @@ metadata:
 
 1. 读现行评分契约 `config/playground-scoring-audit-2026-08-28.md`（2026-08-28 后旧固定公式如"trace≥70 / 8 规则 / -1000 翻账"全部作废，以该契约与现行题面为准）。
 2. 读题面全文，**逐字翻译 §5/§6 评分契约为自建 verifier**（jarvis 法）；识别判分器类型（A 确定性 verifier / B LLM judge / C 内容比对，见 `platform-scorecard-analyze`）；列保留名清单、形式要求、输出 schema。
-3. 只读核对：`GET /api/attempts` 查该身份该题余量与归属；查 `work/`、`bohrium-kb/round3_prep/IDENTITY_POOL.md` 与归档防撞题。429 → 换池内身份，禁新注册。
+3. 只读核对（口径已按平台实况校准）：归属用 `GET /api/attempts?author=<identity>`；余量用 `GET /api/challenges/<slug>/attempts` 按 authorId 计数（每身份每题 10 次）；查 `work/`、`bohrium-kb/round3_prep/IDENTITY_POOL.md` 与归档防撞题。429 → 换池内身份，禁新注册。
 4. 复制 `work/_template/` → `work/<slug>/`，slug 用原始 challenge slug。
-5. 开 `execution/run.log`：此后**每个真实执行的命令与 stdout 都落在里面**（trace 锚定的地面真值）。
+5. 开 `execution/run.log`：此后**每个真实执行的命令与 stdout 都落在里面**（trace 锚定的地面真值）。脱敏规则：平台 API 响应（含 attempt id、分数、判罚、榜单）不得原样粘贴进 run.log 或提交物；平台情报只写 `work/<slug>/diagnostics/`（不进 bundle、不参与红线扫描）。
 6. 向用户复述：题目、判分器类型、身份与余量、授权级别（无授权文件 = 本会话仅 dry-run）、解题计划。
 
 ## 2. 解题主线（四阶段，细节见 `playground-solve-optimal`）
@@ -38,16 +39,20 @@ metadata:
 
 ## 3. 证据与提交（每一步都是门）
 
-1. **trace**：`work/<slug>/trace/trace.jsonl` 从真实执行记录转录（ZCode 会话记录 + run.log 为取材与锚定来源；schema 与铁律见 `real-trace-capture`）。**禁止脚本合成**——`make_traces.py` 只是 schema 参考模板，不是生成器。
+1. **trace**：`work/<slug>/trace/trace.jsonl` 从真实执行记录转录。**推荐用确定性构建器**：
+   ```
+   python scripts/ascodex_trace_builder.py --run-log work/<slug>/execution/run.log --commands '["python solve.py", ...]' --out work/<slug>/trace/trace.jsonl --artifact-path outputs/answer.txt
+   ```
+   （输入真实 run.log + 命令清单，产出天然满足门校验的 trace——软件转录替代手写，杜绝估算/补写）。构建后仍跑 trace_check 复核。schema 与铁律见 `real-trace-capture`。**禁止凭空合成**——`make_traces.py` 只是 schema 参考模板，不是生成器。
 2. **本地校验（必须全绿才能进入提交流程）**：
    ```
    python work/_template/trace_check.py work/<slug>/trace/trace.jsonl --run-log work/<slug>/execution/run.log --root work/<slug>
    python work/_template/redline_scan.py work/<slug>
    ```
-   红线命中时改写提交物后重扫，不得放宽词表。
+   红线命中时改写提交物后重扫，不得放宽词表（工具源文件与 diagnostics/ 自动跳过）。
 3. **审计**：`python bohrium-kb/tools/submit_gate_audit.py`（提交六门对照，只读）。
 4. **请求授权**：向用户说明本次提交内容与预期，请用户创建 `.submit-authorized`（次数 N）。
-5. **执行提交**：`python work/_template/submit_bundle.py --challenge <id> --outcome <success|partial|failed|stuck> ...`（钩子扣减 1 次授权）。提交前 dry-run 看包内清单：契约点名文件逐字在包内（错名上传成功但 0 分）。
+5. **执行提交**：`python work/<slug>/submit_bundle.py --challenge <id> --outcome <success|partial|failed|stuck>`（命令中带 `work/<slug>/` 路径，钩子据此定位授权文件并扣减 1 次）。先 `--dry-run` 看包内清单：契约点名文件逐字在包内（错名上传成功但 0 分）、trace 非空、arm_manifest 的 ran_at/type/handoff 已按真实运行填写。draft 不附 script 字段（附了切到不收录的 bundle/judge 轨——submit_bundle.py 已内置此纪律）。
 6. **提交后只读核实（`submitted`/`queued` 不是成功）**：replay、`resultsJson`、scorecard、credited owner 与授权身份一致、fresh rescore、榜单 scope（清单见 `submit-attempt` Step 5）。记录提交账本：attempt id、bundle revision、sha256、时间。
 
 ## 4. 卡死与收板

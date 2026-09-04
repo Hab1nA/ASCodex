@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""ascodex ZCode 迁移一次性测试：提交门钩子 / 开题注入钩子 / trace_check / redline_scan。
+"""ascodex ZCode 迁移回归测试：提交门钩子 / 开题注入钩子 / trace_check / redline_scan。
 
 全部命令均为参数列表调用（shell=False），输入全是本脚本内的固定字符串。
 沙箱固定在 out/zcode-migration-test/sandbox/，不会删除本脚本自身。
 用法：python tests/zcode-migration/test_all.py
 """
+if __name__ != "__main__":
+    # 本文件是独立脚本而非 pytest 用例；被 testpaths=tests 误收集时整模块跳过
+    import pytest
+    pytest.skip("standalone script: python tests/zcode-migration/test_all.py",
+                allow_module_level=True)
+
 import copy
 import json
 import os
@@ -19,6 +25,7 @@ GATE = REPO / ".zcode" / "hooks" / "submit-gate.js"
 INJ = REPO / ".zcode" / "hooks" / "solve-prompt-inject.js"
 TC = REPO / "work" / "_template" / "trace_check.py"
 RS = REPO / "work" / "_template" / "redline_scan.py"
+SB = REPO / "work" / "_template" / "submit_bundle.py"
 
 results = []
 
@@ -64,11 +71,33 @@ record("非提交命令放行", code == 0, f"code={code} err={err[:160]}")
 code, out, err = run_node(GATE, bash("curl https://play.bohrium.com/api/attempts -H 'x: 1'"))
 record("只读 GET 放行", code == 0, f"code={code} err={err[:160]}")
 
+code, out, err = run_node(GATE, bash("curl -fsSL https://play.bohrium.com/api/attempts"))
+record("curl -fsSL 只读 GET 不误拦", code == 0, f"code={code} err={err[:160]}")
+
+code, out, err = run_node(GATE, bash("Invoke-RestMethod https://play.bohrium.com/api/attempts"))
+record("pwsh 原生 GET 侦察不误拦", code == 0, f"code={code} err={err[:160]}")
+
+code, out, err = run_node(GATE, bash(
+    "git diff HEAD -- work/_template/make_traces.py work/_template/submit_bundle.py"))
+record("工具源文件路径提及不误判为调用", code == 0, f"code={code} err={err[:160]}")
+
 code, out, err = run_node(GATE, bash("curl -X POST https://play.bohrium.com/api/attempts -d '{}'"))
-record("无授权文件 POST 拒绝", code == 2 and "未找到本次会话授权" in err, f"code={code} err={err[:160]}")
+record("无授权文件 POST 拒绝", code == 2 and "未找到任何提交授权" in err, f"code={code} err={err[:200]}")
+
+code, out, err = run_node(GATE, bash("curl -d x=1 https://play.bohrium.com/api/attempts"))
+record("curl -d 短旗标 POST 被拦截", code == 2, f"code={code} err={err[:160]}")
+
+code, out, err = run_node(GATE, bash("Invoke-RestMethod https://play.bohrium.com/api/attempts -Method Post -Body x"))
+record("Invoke-RestMethod -Method Post 被拦截", code == 2, f"code={code} err={err[:160]}")
+
+code, out, err = run_node(GATE, bash("curl -X PATCH https://play.bohrium.com/api/attempts/9 -d x=1"))
+record("PATCH 写动词被拦截", code == 2, f"code={code} err={err[:160]}")
 
 code, out, err = run_node(GATE, bash("python work/_template/submit_bundle.py --challenge ch-1 --outcome partial"))
-record("无授权 submit_bundle 拒绝", code == 2 and "未找到本次会话授权" in err, f"code={code} err={err[:160]}")
+record("无授权 submit_bundle 拒绝", code == 2 and "提交授权" in err, f"code={code} err={err[:200]}")
+
+code, out, err = run_node(GATE, bash("python3.12 work/_template/submit_bundle.py --challenge ch-1"))
+record("python3.12 变体调用被拦截", code == 2, f"code={code} err={err[:160]}")
 
 code, out, err = run_node(GATE, bash(str(T / "work" / "ws-a" / ".submit-authorized").join(["echo 5 > ", ""])))
 record("Bash 触及授权文件拒绝(防自授权)", code == 2 and "只能由用户" in err, f"code={code} err={err[:160]}")
@@ -81,35 +110,51 @@ record("Write 直写授权文件拒绝", code == 2 and "只能由用户" in err,
 code, out, err = run_node(GATE, bash("python work/_template/submit_bundle.py --challenge ch-1 --dry-run"))
 record("submit_bundle --dry-run 放行", code == 0, f"code={code} err={err[:160]}")
 
+code, out, err = run_node(GATE, bash("curl -X POST https://play.bohrium.com/api/attempts -d '{\"note\":\"dryrun\"}'"))
+record("真实 POST 内嵌 dryrun 字样不豁免", code == 2, f"code={code} err={err[:160]}")
+
 code, out, err = run_node(GATE, bash("python bohrium-kb/tools/submit_gate_audit.py --bundle work/ws-a"))
 record("只读审计脚本放行", code == 0, f"code={code} err={err[:160]}")
+
+code, out, err = run_node(GATE, bash(
+    "curl -X POST https://play.bohrium.com/api/attempts -d x=1 && python bohrium-kb/tools/submit_gate_audit.py"))
+record("POST 前置 + 审计后置链不豁免", code == 2, f"code={code} err={err[:160]}")
 
 code, out, err = run_node(GATE, bash("echo submit_bundle.py is the uploader"))
 record("仅提及不拦截", code == 0, f"code={code} err={err[:160]}")
 
+# --- slug 定位授权：多会话并行各扣各的 ---
 (T / "work" / "ws-a" / ".submit-authorized").write_text("2\n", encoding="utf-8")
 (T / "work" / "ws-b" / ".submit-authorized").write_text("2\n", encoding="utf-8")
 
-code, out, err = run_node(GATE, bash("curl -X POST https://play.bohrium.com/api/challenges/ch-1/attempts -d x=1"))
-record("多个授权文件拒绝(恰一原则)", code == 2 and "恰一原则" in err, f"code={code} err={err[:160]}")
-os.remove(T / "work" / "ws-b" / ".submit-authorized")
+code, out, err = run_node(GATE, bash("curl -X POST https://play.bohrium.com/api/attempts -d x=1"))
+record("无 slug + 多授权文件拒绝(防跨题误扣)", code == 2 and "多个授权文件" in err, f"code={code} err={err[:200]}")
 
-code, out, err = run_node(GATE, bash("curl -X POST https://play.bohrium.com/api/challenges/ch-1/attempts -d x=1"))
-record("有授权放行并扣次 2→1", code == 0 and "剩余 1" in err, f"code={code} err={err[:160]}")
-left = (T / "work" / "ws-a" / ".submit-authorized").read_text(encoding="utf-8").strip()
-record("授权文件内容扣减正确", left == "1", f"left={left!r}")
+code, out, err = run_node(GATE, bash("python work/ws-a/submit_bundle.py --challenge ch-1 --outcome partial"))
+record("slug 定位放行并只扣 ws-a 2→1", code == 0 and "剩余 1" in err, f"code={code} err={err[:200]}")
+record("ws-a 授权文件扣减正确", (T / "work" / "ws-a" / ".submit-authorized").read_text(encoding="utf-8").strip() == "1")
+record("ws-b 授权文件不受影响", (T / "work" / "ws-b" / ".submit-authorized").read_text(encoding="utf-8").strip() == "2")
+
+# 用户撤走 ws-a 授权后，仅剩 ws-b：无 slug 命令回退恰一原则
+os.remove(T / "work" / "ws-a" / ".submit-authorized")
 
 code, out, err = run_node(GATE, bash("curl --data y=2 https://play.bohrium.com/api/attempts/9/bundle"))
-record("第二次放行 1→0 并移除文件", code == 0 and "剩余 0" in err, f"code={code} err={err[:160]}")
-record("扣尽后授权文件已删除", not (T / "work" / "ws-a" / ".submit-authorized").exists())
+record("无 slug 时回退恰一原则放行 2→1", code == 0 and "剩余 1" in err, f"code={code} err={err[:160]}")
 
 code, out, err = run_node(GATE, bash("curl -X POST https://play.bohrium.com/api/attempts -d z=3"))
-record("扣尽后拒绝", code == 2 and "未找到本次会话授权" in err, f"code={code} err={err[:160]}")
+record("无 slug 第二次放行 1→0 并移除 ws-b", code == 0 and "剩余 0" in err, f"code={code} err={err[:160]}")
+record("ws-b 扣尽后授权文件已删除", not (T / "work" / "ws-b" / ".submit-authorized").exists())
+
+code, out, err = run_node(GATE, bash("python work/ws-a/submit_bundle.py --challenge ch-1"))
+record("slug 指向无授权的 ws-a 拒绝", code == 2 and "ws-a" in err, f"code={code} err={err[:200]}")
 
 # ---------- 开题注入 ----------
 code, out, err = run_node(INJ, {"prompt": "开始解题 challenge=ch-1 workspace=work/ws-a identity=x auth=dry-run"})
-record("触发词注入 additionalContext", code == 0 and "ascodex-solve" in out and "提交纪律" in out,
+record("触发词'开始解题'注入", code == 0 and "ascodex-solve" in out and "提交纪律" in out,
        f"code={code} out={out[:160]}")
+
+code, out, err = run_node(INJ, {"prompt": "解这道题 https://play.bohrium.com/#challenge/ch-9"})
+record("challenge URL 开场同样注入", code == 0 and "ascodex-solve" in out, f"code={code} out={out[:160]}")
 
 code, out, err = run_node(INJ, {"prompt": "帮我看看昨天的提交"})
 record("非触发词静默放行", code == 0 and out == "", f"code={code} out={out[:160]}")
@@ -210,6 +255,22 @@ custom.mkdir(parents=True, exist_ok=True)
 (custom / "a.txt").write_text("这里提到 内部代号-xyz 应命中\n", encoding="utf-8")
 code, out, err = run_py(RS, [str(custom)])
 record("redline_scan 自定义词条生效", code == 1 and "内部代号-xyz" in out, f"code={code} out={out[:200]}")
+
+diag = W / "diag_ws"
+diag.mkdir(parents=True, exist_ok=True)
+(diag / "a.txt").write_text("干净正文\n", encoding="utf-8")
+(diag / "diagnostics").mkdir(exist_ok=True)
+(diag / "diagnostics" / "intel.txt").write_text("平台情报区：harbor_reward 应被跳过\n", encoding="utf-8")
+code, out, err = run_py(RS, [str(diag)])
+record("redline_scan 跳过 diagnostics/ 平台情报区", code == 0 and "CLEAN" in out, f"code={code} out={out[:200]}")
+
+# ---------- submit_bundle fail-closed（模板当前无 trace） ----------
+proc = subprocess.run(
+    [sys.executable, str(SB), "--challenge", "x", "--dry-run"],
+    capture_output=True, timeout=60, shell=False)
+out = (proc.stdout + proc.stderr).decode("utf-8", "replace")
+record("submit_bundle 无 trace 时 fail-closed", proc.returncode != 0 and "FAIL-CLOSED" in out,
+       f"code={proc.returncode} out={out[:200]}")
 
 # ---------- 汇总 ----------
 failed = [name for name, ok in results if not ok]

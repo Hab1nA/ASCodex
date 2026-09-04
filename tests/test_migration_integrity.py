@@ -22,7 +22,9 @@ def test_harness_skill_inventory_is_complete() -> None:
     skills = sorted((ROOT / "skills" / "deepseek-harness").glob("*/SKILL.md"))
     assert len(skills) == 32
     active_skills = sorted((ROOT / ".agents" / "skills").glob("*/SKILL.md"))
-    assert len(active_skills) == 32
+    # 32 个迁移技能 + ascodex-solve（2026-09-04 ZCode 单会话迁移新增入口）
+    assert len(active_skills) == 33
+    assert (ROOT / ".agents" / "skills" / "ascodex-solve" / "SKILL.md").is_file()
     assert (ROOT / "skills" / "deepseek-harness" / "playground-solve-optimal" / "SKILL.md").is_file()
     assert (ROOT / "skills" / "deepseek-harness" / "trace-contamination-redline" / "SKILL.md").is_file()
 
@@ -36,11 +38,16 @@ def test_no_runtime_credentials_or_private_keys_are_migrated() -> None:
     for path in ROOT.rglob("*"):
         # ".mimosa" is local plugin hook state (it snapshots repo files under hashed names);
         # it is runtime residue, not migrated content, and must never gate this scan.
+        # "private"/".codex"/"out" 是 gitignored 运行态（凭据、会话转录、E2E 产物），
+        # 不属迁移入库内容；本断言的对象是迁移物本身。
         if (
             not path.is_file()
             or ".git" in path.parts
             or "__pycache__" in path.parts
             or ".mimosa" in path.parts
+            or "private" in path.parts
+            or ".codex" in path.parts
+            or "out" in path.parts
         ):
             continue
         relative = path.relative_to(ROOT)

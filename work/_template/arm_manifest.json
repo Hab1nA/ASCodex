@@ -29,19 +29,20 @@
   "expected_outputs": [
     {
       "name": "CHANGE_ME_target",
+      "type": "metric",
       "description": "CHANGE_ME",
       "path": "outputs/answer.txt",
       "produced_by": ["answer_txt", "result_json"]
     }
   ],
   "agents_used": [
-    {"agent_id": "friday", "role": "implementation, verification, packaging"}
+    {"agent_id": "CHANGE_ME_solver", "role": "implementation, verification, packaging"}
   ],
   "execution": {
-    "ran_at": "2026-08-13T00:00:00Z",
-    "ran_by": "agent:friday (DeepSeek Harness, DeepSeek-V4)",
+    "ran_at": "CHANGE_ME_ISO8601_START",
+    "ran_by": "CHANGE_ME (真实会话身份与模型，勿留历史默认)",
     "exit_code": 0,
-    "wall_time_s": 900,
+    "wall_time_s": 3600,
     "log_path": "execution/run.log",
     "artifacts": [
       {"format": "txt", "id": "answer_txt", "path": "outputs/answer.txt", "type": "metric"},
@@ -59,7 +60,7 @@
     "path": "trace/trace.jsonl"
   },
   "handoff": {
-    "status": "complete",
+    "status": "partial",
     "next_owner_hint": "reviewer",
     "next_suggestion": "Verify outputs against the paper reference.",
     "modality_notes": {},

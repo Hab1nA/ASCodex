@@ -1,0 +1,17 @@
+{
+  "answer": {
+    "gates": [
+      "trace_check",
+      "redline_scan",
+      "submit_gate_audit",
+      "submit_gate_hook"
+    ],
+    "pipeline": "smoke",
+    "value": 42
+  },
+  "artifacts": {
+    "answer": "outputs/answer.txt"
+  },
+  "challenge_id": "test",
+  "method": "toolchain smoke"
+}

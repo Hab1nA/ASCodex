@@ -24,12 +24,12 @@ Load and restore task state from a structured checkpoint file.
 
 ```bash
 BRANCH=$(git branch --show-current)
-LATEST=$(ls -t .claude/checkpoints/${BRANCH}-*.yaml 2>/dev/null | head -1)
+LATEST=$(ls -t work/<slug>/checkpoints/${BRANCH}-*.yaml 2>/dev/null | head -1)
 
 if [ -z "$LATEST" ]; then
   echo "No checkpoint found for branch: $BRANCH"
   echo "Available checkpoints:"
-  ls -t .claude/checkpoints/*.yaml 2>/dev/null | head -10
+  ls -t work/<slug>/checkpoints/*.yaml 2>/dev/null | head -10
   exit 1
 fi
 
@@ -43,8 +43,8 @@ CHECKPOINT_FILE="$LATEST"
 ARG="$1"
 if [ -f "$ARG" ]; then
   CHECKPOINT_FILE="$ARG"
-elif ls -t .claude/checkpoints/${ARG}-*.yaml 2>/dev/null | head -1 > /dev/null; then
-  CHECKPOINT_FILE=$(ls -t .claude/checkpoints/${ARG}-*.yaml | head -1)
+elif ls -t work/<slug>/checkpoints/${ARG}-*.yaml 2>/dev/null | head -1 > /dev/null; then
+  CHECKPOINT_FILE=$(ls -t work/<slug>/checkpoints/${ARG}-*.yaml | head -1)
 else
   echo "Checkpoint not found: $ARG"
   exit 1
@@ -57,7 +57,7 @@ fi
 import yaml
 import os
 
-checkpoint_file = os.environ.get('CHECKPOINT_FILE', '.claude/checkpoints/latest.yaml')
+checkpoint_file = os.environ.get('CHECKPOINT_FILE', 'work/<slug>/checkpoints/latest.yaml')
 
 with open(checkpoint_file, 'r') as f:
     checkpoint = yaml.safe_load(f)

@@ -32,4 +32,4 @@
 
 - 触发词"开始解题"会被仓库 `UserPromptSubmit` 钩子自动注入纪律前言（现行契约指针、开场六步、提交门、红线），prompt 里不必重复纪律。
 - `auth` 与授权文件是两道一致的闸：prompt 里写 `auth=dry-run` 时不要创建授权文件；要提交时先创建 `.submit-authorized` 再告知会话。
-- 多个会话并行解题时，各题 workspace 互不重叠、各用各的授权文件；`work/` 下同时存在多个授权文件会被提交门拒绝（恰一原则），提交前清理已用完的。
+- 多个会话并行解题时，各题 workspace 互不重叠、各用各的授权文件（提交门按命令中的 `work/<slug>/` 路径或会话 cwd 定位对应授权文件，互不干扰）；若提交命令不带 `work/<slug>/` 路径且 work/ 下有多个授权文件，会被拒绝——提交命令请写全 `python work/<slug>/submit_bundle.py ...`。

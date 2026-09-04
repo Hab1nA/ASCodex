@@ -132,7 +132,7 @@ bohr update           # 更新 bohr 到最新版
 | **冒烟测试、脚本调试（单次 <2 分钟）** | 本地 | Python |
 | **完整重型计算（DFT/MD/燃烧/大网格/长时限/GPU/数分钟以上）** | **Bohrium 云端（一律，禁止本地跑）** | **`bohr job submit`** |
 | 结果下载、画图、与论文原图对比 | 本地 | Python + SSIM |
-| 提交 attempt 与评分 | Playground | `playground submit`（或 submit-attempt 技能） |
+| 提交 attempt 与评分 | Playground | `work/<slug>/submit_bundle.py`（提交门授权下；或 submit-attempt 技能） |
 
 ### 提交到 Bohrium 的作业模板要点
 

@@ -1,0 +1,7 @@
+# execution/run.log — 题目工作区的地面真值日志
+
+本文件由解题会话填写：每个真实执行的命令与其 stdout 依次追加在此。
+trace/trace.jsonl 的 tool_result.body 以本文件为逐字锚定来源（trace_check.py 校验）。
+
+脱敏规则：平台回传的编号/得分/评审结论类信息不得原样粘贴进 run.log 或任何
+提交物；平台情报只写入 diagnostics/（不进 bundle、不参与红线扫描）。

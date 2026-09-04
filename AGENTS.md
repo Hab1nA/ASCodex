@@ -23,6 +23,14 @@
 6. 重型计算优先 Bohrium 云端；本地仅做短时 smoke test 与结果分析。
 7. 选题同时检查 `work/`、历史归档和协作记录；新增题目只写入 `work/`，完成后再归档。
 
-## Codex 适配边界
+## ZCode 单会话解题模式（2026-09-04 起）
 
-Codex 具备 shell、浏览器、Bohrium 通用 API 技能和协作代理，但没有 DSH 的 solver-guard、ScoreWatcher、AutoPush、SkillInjector 或持久 supervisor。任何“六门强制拦截、后台监控、自动提交”都只能在实现并验证对应代码后声明已启用；角色文档本身不等于运行时权限。
+本仓库已把 ASCodex 的解题能力内化为 ZCode 形态，工作模式为**一题一会话**：用户开多个独立 ZCode 会话，每会话解一道题；无总负责人、无解题子代理（多代理派发组件已废止）。
+
+- 入口技能：`.agents/skills/ascodex-solve/SKILL.md`（开场六步 → 四阶段解题 → 证据校验 → 提交 → 回报五要素）。触发词"开始解题"等会由 `.zcode/hooks/solve-prompt-inject.js` 自动注入纪律前言；prompt 模板见 `config/zcode-solve-prompt.md`。
+- **提交门（硬拦截，PreToolUse 钩子 `.zcode/hooks/submit-gate.js`）**：针对 `play.bohrium.com` 的写命令与 `submit_bundle.py` 上传，仅当对应题目的 `work/<slug>/.submit-authorized` 存在时放行。该文件**只能由用户在会话外手工创建**（首个非空行 = 允许提交次数，每次原子扣 1，扣尽失效）；模型侧任何触及该文件的操作一律被拒。`--dry-run` 与只读审计不受限。已知边界：本门是启发式而非安全边界（文档型工具如 urllib 拼接、动态构造路径理论上可绕过），补偿控制是提交后 `bohrium-kb/tools/submit_gate_audit.py` 审计 + 只读核验。同理，`redline_scan.py`/`trace_check.py` 等校验器的修改属运维操作，解题会话不得改动。
+- 证据纪律：trace 用 `scripts/ascodex_trace_builder.py` 从真实 `execution/run.log` 确定性转录（禁凭空合成）；提交前 `trace_check.py` + `redline_scan.py` 必须全绿；平台回传的编号/得分/评审信息不进 run.log 与提交物，平台情报只写 `work/<slug>/diagnostics/`（不进 bundle）。
+
+## Codex 适配边界（历史）
+
+Codex 具备 shell、浏览器、Bohrium 通用 API 技能和协作代理，但没有 DSH 的 solver-guard、ScoreWatcher、AutoPush、SkillInjector 或持久 supervisor。ZCode 下的等价强制已实现并入库（`.zcode/` 钩子 + `work/_template/` 校验器）；本节保留作为 DSH→Codex→ZCode 迁移史的边界记录。

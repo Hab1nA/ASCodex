@@ -5,6 +5,8 @@ description: Complete EARS session lifecycle for a multi-session reproduction ta
 
 # /ears-lifecycle
 
+> **ZCode 模式注记（2026-09-04）**：本技能引用的 `/sync-and-plan`、`/reflect`、`/wrap-up` 在当前仓库不存在；单会话模式下按 `ascodex-solve` 的开场六步与 `closure-evidence-standard` 收板，checkpoint/resume 仍可用（路径用 `work/<slug>/checkpoints/`）。
+
 Complete EARS session lifecycle for a multi-session reproduction task: sync with master and plan work, execute the reproduction, checkpoint progress, reflect on lessons learned, and wrap up the branch. Ensures no knowledge is lost between sessions — the checkpoint captures task state (what to do next) while reflect captures reusable knowledge (what to remember).
 
 ## Pipeline

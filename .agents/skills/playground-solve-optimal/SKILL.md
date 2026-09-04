@@ -39,7 +39,7 @@ tags: [bohrium-playground, strategy, scoring, checklist]
 - **C 类**：内容与 truth model 对齐（cn.mops 语义/生成器逆向/锐度+散斑双门），参数化悬崖扫描（超声 α/β）。
 
 ### 提交纪律（每条都是血泪教训）
-1. 提交前：`GET /api/attempts` 核对该身份该题余量（429 换池内身份，禁新注册）。
+1. 提交前：`GET /api/challenges/<slug>/attempts` 按 authorId 计数核对余量（每身份每题 10 次；429 换池内身份，禁新注册）。
 2. 提交后：`GET /api/attempts/{id}` 核实 challengeId 归属（三次 ID 混淆事故）。
 3. trace 走统一流水线（见 `trace-maximize`）。
 4. 回报五要素：attempt id + 身份 + harbor + trace + 判词。

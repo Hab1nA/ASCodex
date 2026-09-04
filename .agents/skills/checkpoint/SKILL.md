@@ -47,8 +47,8 @@ Review conversation history and files to extract:
 ```bash
 BRANCH=$(git branch --show-current)
 TIMESTAMP=$(date -u +"%Y%m%d-%H%M%S")
-CHECKPOINT_FILE=".claude/checkpoints/${BRANCH}-${TIMESTAMP}.yaml"
-mkdir -p .claude/checkpoints
+CHECKPOINT_FILE="work/<slug>/checkpoints/${BRANCH}-${TIMESTAMP}.yaml"
+mkdir -p "work/<slug>/checkpoints"
 ```
 
 ## Step 3 — Write checkpoint YAML
@@ -130,7 +130,7 @@ resume_instructions: |
 python3 -c "import yaml; yaml.safe_load(open('$CHECKPOINT_FILE'))"
 
 # Commit
-git add .claude/checkpoints/
+git add "work/<slug>/checkpoints/"
 PHASE=$(python3 -c "import yaml; print(yaml.safe_load(open('$CHECKPOINT_FILE'))['phase']['current'])")
 git commit -m "checkpoint: $PHASE"
 ```
@@ -151,13 +151,13 @@ Keep only last 5 checkpoints per branch:
 
 ```bash
 BRANCH=$(git branch --show-current)
-CHECKPOINTS=$(ls -t .claude/checkpoints/${BRANCH}-*.yaml 2>/dev/null)
+CHECKPOINTS=$(ls -t work/<slug>/checkpoints/${BRANCH}-*.yaml 2>/dev/null)
 COUNT=$(echo "$CHECKPOINTS" | wc -l)
 
 if [ "$COUNT" -gt 5 ]; then
-  mkdir -p .claude/checkpoints/archive
+  mkdir -p "work/<slug>/checkpoints/archive"
   echo "$CHECKPOINTS" | tail -n +6 | while read old; do
-    mv "$old" .claude/checkpoints/archive/
+    mv "$old" "work/<slug>/checkpoints/archive/"
   done
 fi
 ```

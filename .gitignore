@@ -57,3 +57,6 @@ codex/codex-rs/target*/
 
 # ZCode solve-session runtime state (user-created, never committed)
 work/**/.submit-authorized
+.ascodex/
+.codex/tmp/
+.codex/.sandbox-bin/

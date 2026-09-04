@@ -39,8 +39,11 @@ SCORE_PATTERNS = [
 # 移植自 solver-guard contains_attempt_number: "attempt" 后跟可选空白/_-再跟数字
 ATTEMPT_NUMBER = re.compile(r"attempt[\s_-]*\d", re.IGNORECASE)
 
-SKIP_DIRS = {".git", "__pycache__", "node_modules", ".zcode", ".codex"}
-SKIP_FILES = {"redline_scan.py", "redline_terms.txt"}
+SKIP_DIRS = {".git", "__pycache__", "node_modules", ".zcode", ".codex", "diagnostics"}
+# 工具源文件与词条表本身含示例词条/变量名，不属提交表面；diagnostics/ 是平台
+# 情报区（不进 bundle，见 ascodex-solve §1.5），同样不在红线扫描范围。
+SKIP_FILES = {"redline_scan.py", "redline_terms.txt", "trace_check.py",
+              "make_traces.py", "submit_bundle.py"}
 
 
 def load_custom_terms(bundle: Path) -> list[str]:
