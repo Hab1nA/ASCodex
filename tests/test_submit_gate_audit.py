@@ -34,10 +34,11 @@ def write_trace(root: Path) -> None:
     )
 
 
-def test_all_six_gates_pass_for_clean_dry_run(tmp_path: Path) -> None:
+def test_all_six_gates_pass_for_clean_dry_run(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "answer.txt").write_text("derived value = 1.25\n", encoding="utf-8")
     (tmp_path / "run.log").write_text("tool executed successfully\n", encoding="utf-8")
     write_trace(tmp_path)
+    monkeypatch.setenv("ASCODEX_MODEL", "GLM-5.3-Flash")
     payload = {
         "channel": "harbor_track",
         "script": False,
@@ -50,7 +51,7 @@ def test_all_six_gates_pass_for_clean_dry_run(tmp_path: Path) -> None:
         },
         "redline": {"artifacts": ["answer.txt"]},
         "trace": {"path": "trace.jsonl", "real_execution": True, "provenance_paths": ["run.log"]},
-        "model": {"name": "gpt-5.6-luna", "reasoning_effort": "max"},
+        "model": {"name": "GLM-5.3-Flash"},
     }
     assert audit_channel(payload)["passed"]
     assert audit_identity(payload)["passed"]
@@ -60,10 +61,11 @@ def test_all_six_gates_pass_for_clean_dry_run(tmp_path: Path) -> None:
     assert audit_model(payload)["passed"]
 
 
-def test_each_high_risk_gate_blocks(tmp_path: Path) -> None:
+def test_each_high_risk_gate_blocks(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "answer.txt").write_text("harbor score from prior attempt\n", encoding="utf-8")
     (tmp_path / "run.log").write_text("run\n", encoding="utf-8")
     write_trace(tmp_path)
+    monkeypatch.setenv("ASCODEX_MODEL", "GLM-5.3-Flash")
     assert not audit_channel({"channel": "judge_track", "script": True})["passed"]
     assert not audit_identity({"identity": {"name": "Friday-01", "status": "FROZEN", "remaining": 5}})["passed"]
     assert not audit_cadence(
@@ -82,7 +84,17 @@ def test_each_high_risk_gate_blocks(tmp_path: Path) -> None:
         {"trace": {"path": "trace.jsonl", "real_execution": False, "provenance_paths": ["run.log"]}},
         tmp_path,
     )["passed"]
-    assert not audit_model({"model": {"name": "unknown", "reasoning_effort": "low"}})["passed"]
+    # 历史默认模型名 = 陈旧 provenance，直接拒
+    assert not audit_model({"model": {"name": "DeepSeek-V4-Flash"}})["passed"]
+    assert not audit_model({"model": {"name": "gpt-5.6-luna"}})["passed"]
+    # 与声明模型不符 / 空 / unspecified 均拒
+    assert not audit_model({"model": {"name": "unknown"}})["passed"]
+    assert not audit_model({"model": {"name": ""}})["passed"]
+    assert not audit_model({"model": {"name": "unspecified"}})["passed"]
+    monkeypatch.delenv("ASCODEX_MODEL", raising=False)
+    # 未声明 ASCODEX_MODEL 时：真实自报模型放行（无交叉核验），历史名仍拒
+    assert audit_model({"model": {"name": "Some-Real-Model"}})["passed"]
+    assert not audit_model({"model": {"name": "DeepSeek-V4-Flash"}})["passed"]
 
 
 def test_structured_channel_and_trace_thresholds_are_enforced(tmp_path: Path) -> None:

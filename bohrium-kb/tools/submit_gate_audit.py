@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -24,7 +25,9 @@ DEFAULT_BANNED_PATTERNS = (
     r"\b(?:team|competitor|leaderboard|榜单|判官|分数|attempt)\b",
 )
 ALLOWED_CHANNELS = {"harbor_track", "harbor_only", "cli_no_script"}
-ALLOWED_MODELS = {"gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "DeepSeek-V4-Flash"}
+# 模型口径：规范值 = 环境变量 ASCODEX_MODEL（submit_bundle.py 默认同源）。
+# 以下历史默认模型名视为陈旧 provenance，直接拒绝。
+HISTORICAL_MODELS = {"gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "DeepSeek-V4-Flash"}
 
 
 def parse_timestamp(value: Any) -> datetime | None:
@@ -173,11 +176,19 @@ def audit_model(payload: dict[str, Any]) -> dict[str, Any]:
     model = payload.get("model")
     if not isinstance(model, dict):
         return result("model", False, "model object is required")
-    model_name = model.get("name")
-    effort = model.get("reasoning_effort")
-    passed = model_name in ALLOWED_MODELS and effort in {"max", "xhigh", "high"}
-    detail = "model and reasoning effort are permitted" if passed else "model/effort is not in the approved set"
-    return result("model", passed, detail)
+    model_name = str(model.get("name") or "").strip()
+    declared = os.environ.get("ASCODEX_MODEL", "").strip()
+    if not model_name or model_name.lower() == "unspecified":
+        return result("model", False,
+                      "model must be the real session model (ASCODEX_MODEL), not empty/unspecified")
+    if model_name.lower() in {m.lower() for m in HISTORICAL_MODELS}:
+        return result("model", False,
+                      "model is a historical default (stale provenance); report the real session model")
+    if declared and model_name.lower() != declared.lower():
+        return result("model", False, f"model does not match declared ASCODEX_MODEL ({declared})")
+    detail = (f"model matches declared ASCODEX_MODEL ({declared})" if declared
+              else "model self-reported; ASCODEX_MODEL unset so no cross-check available")
+    return result("model", True, detail)
 
 
 def load_payload(path: Path) -> dict[str, Any]:
