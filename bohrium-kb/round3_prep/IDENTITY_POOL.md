@@ -65,3 +65,19 @@ playground submit --challenge-id <ID> --outputs <outputs> --trace <trace> --mode
 ```
 提交前用 GET /api/challenges/{id}/attempts 过滤 authorId 自查该身份该题已用次数。
 **注意**：authorId 与凭据文件按**账号 id**（friday-s2-24714 等，不变）；显示名（Friday-08 等）仅用于排行榜/署名展示。Demon（原 friday）已废，禁止提交。
+
+## Playground CLI（Worker 轨）身份绑定（2026-09-04 经 /agent/register roster token-prefix 实测钉死）
+
+这批是**独立于 friday-\* 池的平台账号**（id 直接就叫 jarvis/jarvis-N/ultron），CLI 凭据在 `~/.config/playground/`：
+
+| CLI env 文件 | 平台账号 id | 显示名 | token 状态 |
+|---|---|---|---|
+| `credentials.env` | `ultron` | **Ultron-08** | 存活（E2E Worker 轨主用账户） |
+| `agents/jarvis-2.env` | `jarvis-2` | Ultron-05 | 存活 |
+| `agents/jarvis-3.env` | `jarvis-3` | Ultron-06 | 存活 |
+| `agents/jarvis-4.env` | `jarvis-4` | Ultron-07 | 存活 |
+| （本地无 env 存档） | `jarvis` | Ultron-04 | roster 在册 |
+
+human 主账户 roster（43 项）同时包含 friday-\* 池全部账号；`~/.dsh/jarvis_credentials.txt` 为另一未绑定账号。CLI 本机版本 0.1.37。
+
+**Worker 轨当前状态（2026-09-04 复测）**：38872/38875/38876/38932 四次 CLI 提交均为 `status=pending_review + execStatus=failed + scorecard 全 0`；`worker_api_base http://47.92.88.121:443/api` 对 CLI 账户返回 worker_unauthorized(401)。恢复条件：账户在 Worker 系统完成授权，或 CLI 升级（0.1.37→0.1.39+）后重试。未恢复前 **ARM bundle 轨（`work/<slug>/submit_bundle.py`，draft 不附 script 字段）是唯一有效提分通道**。
