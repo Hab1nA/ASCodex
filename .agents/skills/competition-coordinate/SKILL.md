@@ -8,13 +8,13 @@ tags: [bohrium-playground, coordination, multi-agent, orchestration]
 
 # 多代理协调作战手册（总负责人视角）
 
-> **ZCode 模式注记（2026-09-04）**：当前工作模式为"一题一会话"单会话解题（见 `ascodex-solve`），不存在总负责人与解题子代理，本手册的派活/换人/监控编排**不适用**，仅作历史多代理协作参考；身份配额纪律与决策日志条款仍可沿用。
+> **ZCode 模式注记**：当前工作模式为"一题一会话"单会话解题（见 `ascodex-solve`），不存在总负责人与解题子代理，本手册的派活/换人/监控编排**不适用**，仅作历史多代理协作参考；身份配额纪律与决策日志条款仍可沿用。
 
 ## Codex 安全适配
 
-Codex 的代理接口是 `collaboration.spawn_agent`、`collaboration.followup_task`、`collaboration.send_message` 和 `collaboration.wait_threads`；没有 DSH 的 `subagent_send`、`subagent_queue` 或 steer/cancel_first 参数。飞书 hook 仅在已连接的 Lark 工具可用时启用，否则标记为不可用。决策日志写入用户明确指定的 `bohrium-kb/round3_prep/DECISION_LOG.md`，不写入 `.claude/memory/`。
+Codex 的代理接口是 `collaboration.spawn_agent`、`collaboration.followup_task`、`collaboration.send_message` 和 `collaboration.wait_threads`；没有 DSH 的 `subagent_send`、`subagent_queue` 或 steer/cancel_first 参数。飞书 hook 仅在已连接的 Lark 工具可用时启用，否则标记为不可用。决策日志写入用户明确指定的项目日志文件，不写入 `.claude/memory/`。
 
-S4 Round-3 实战验证的作战编排（10 题并行、20+ 子代理、最终 761 分第 7 名）。总负责人**只决策不执行**。
+总负责人**只决策不执行**。
 
 ## 六类角色
 
@@ -42,10 +42,10 @@ S4 Round-3 实战验证的作战编排（10 题并行、20+ 子代理、最终 7
 ## 教训沉淀协议（融合自平台 /reflect 技能）
 
 每轮结束（或卡死复盘后），总负责人把新教训写入用户明确指定的项目日志（分类 + 去重 + 过期）：
-- `pitfalls.yaml`：踩过的坑（wrong→right→impact），如 "trace 引论文 → 69→92.75 修复"；
+- `pitfalls.yaml`：踩过的坑（wrong→right→impact，如"trace 引论文 → 去引用后修复"）；
 - `patterns.yaml`：应持续遵循的多步流程（如"开题先译 §5 契约成自建 verifier"）；
 - `decisions.yaml`：有取舍的架构决策（如"身份池冻结"）；
-- `review-insights.yaml`：外部审阅的宝贵观察（如 jarvis 裸值 4 的洞察）。
+- `review-insights.yaml`：外部审阅的宝贵观察。
 规则：可操作、具体（含 attempt id/文件）、先查重再写、过期条目（+3 个月）清理。
 
 ## OODA 攻坚环
@@ -60,19 +60,19 @@ Observe（监控+情报员采集，总负责人不轮询）→ Orient（每题�
    - B 级（攒批简报）：参赛者技术讨论（判官线索）、官方回复、多人反馈同类问题。
    - C 级（忽略）：闲聊、重复。
 3. **上报格式**：`[级别] 时间 + 话题 + 原文关键句（逐字）+ 建议行动`。拿不准按 A 级。
-4. **落盘**：FEISHU_INTEL.md（时间戳+原文）。
+4. **落盘**：追加到情报台账文件（时间戳+原文）。
 5. 情报员只报情报不决策；总负责人据 A 级情报派活（如"bundle 通道故障→暂缓依赖 bundle 的提交"）。
 
 ## 信息纪律（每条都是血泪教训）
 
-1. **attempt id 归属核实**：任何 report 引用分数前必须 `GET /api/attempts/{id}` 核对 challengeId（三次 ID 混淆事故：26061/26377/26178）。
-2. **身份配额中央注册**：提交前登记、禁止新注册、429 换池内身份、claimed_operator=1179613 校验（friday-t2 孤儿事故）。**身份类别由用户指定**：用户发开始解题命令时指定可用身份类别，代理只能用被指定的类别，禁止使用未被指定的其它身份（即使池内有余量）；换身份上报总负责人裁决，不自选。**绝对禁止新增/注册任何 Agent 身份**（池已冻结，违规代理将被中断）。
+1. **attempt id 归属核实**：任何 report 引用分数前必须 `GET /api/attempts/{id}` 核对 challengeId（批量提交时工作目录/challengeId 会静默漂移，已多次发生错记）。
+2. **身份配额中央注册**：提交前登记、禁止新注册、429 换池内身份、claimed_operator 校验（防孤儿身份）。**身份类别由用户指定**：用户发开始解题命令时指定可用身份类别，代理只能用被指定的类别，禁止使用未被指定的其它身份（即使池内有余量）；换身份上报总负责人裁决，不自选。**绝对禁止新增/注册任何 Agent 身份**（池已冻结，违规代理将被中断）。
 3. **知识库防传染**：REPORT 分"事实（attempt id 证据）"与"结论（证伪条件）"；接手代理先读证据再读结论，有权挑战旧结论。
-   目录：活跃题 `work/`，完赛题 `archive/challenges/`，jarvis/ultron `archive/collab/`（只读）。选题必须同时扫这三处，不能只扫 `work/`。对照 `AGENTS.md` / `archive/README.md`。
+   目录：活跃题 `work/`，完赛题进归档桶（只读）。选题必须同时扫两处，不能只扫 `work/`。对照 `AGENTS.md`。
 4. **回报五要素**：attempt id + 身份 + harbor + trace + 判词。
 5. **决策日志**：每条决策记（为何、预期、期限），供赛后复盘。
 
-## 消息纪律（running/resident 代理 followup 纪律，10 solver 积压 11 条教训）
+## 消息纪律（running/resident 代理 followup 纪律）
 
 1. **running/resident 代理**（解题中/常驻代理）：使用 `collaboration.send_message` 发送非破坏性说明；需要改变任务时先等待工具调用边界，再用 `collaboration.followup_task`，不要假设存在 DSH 的 steer/cancel_first。
 2. **followup 仅 cold resume**：对已停/已完成/卡死的代理，走 cold resume（恢复会话）再发消息，不往热会话塞 followup。
@@ -81,7 +81,7 @@ Observe（监控+情报员采集，总负责人不轮询）→ Orient（每题�
 
 ## monitor 职责扩展：STATUS.md 固定状态文件
 
-- monitor 代理维护 **STATUS.md**（固定位置，如 `bohrium-kb/round3_prep/STATUS.md`），**每 cycle 覆盖**（非追加）：
+- monitor 代理维护 **STATUS.md**（固定位置），**每 cycle 覆盖**（非追加）：
   ```
   # STATUS（<时间戳>）
   scoreboard: <总分/排名/各题最新分>
@@ -91,7 +91,7 @@ Observe（监控+情报员采集，总负责人不轮询）→ Orient（每题�
   next-checkpoint: <下次检查点时间>
   ```
 - 目的（高分选手 endgame 机制）：人醒一眼看状态，不挖聊天记录；会话死亡后新会话从 STATUS.md 秒恢复上下文。
-- 格式五要素固定，monitor 每次轮询后覆盖更新；MONITOR_REPORT.md 保留事件流详表，STATUS.md 只放当前快照。
+- 格式五要素固定，monitor 每次轮询后覆盖更新；事件流详表另放独立台账，STATUS.md 只放当前快照。
 
 ## 时间与额度管理
 

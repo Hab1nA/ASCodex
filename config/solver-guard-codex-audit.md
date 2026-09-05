@@ -102,14 +102,12 @@ solver-guard crate ───── 六门策略、凭据句柄、原子账本、
 - `ASCLocal-Codex` 当前是迁移镜像，不包含 DSH 凭据、sessions、运行时 node_modules，也不应把它们复制进 Codex fork。
 - 普通 Codex plugin manifest、skill、role、AGENTS.md 只能提供默认行为和人机协作提示；硬性六门必须由 core/app-server broker + 持久 ledger 实现。
 
-## 2026-08-27 最新 DSH 插件复核
+## DSH 插件复核结论
 
-本机 `C:\Users\XKZ\dsh-plugins\dsh-solver-guard` 当前为 `0.2.1`，已增加 ARM bundle/protocol-first admission、并发 quota reservation、身份白名单、Bohrium job 管理和更完整的 trace/redline 检查；`CAPABILITIES.md` 明确仍是 host-plane 插件，不修改 DSH core，Windows ACL 强隔离默认关闭。
+本机 `C:\Users\XKZ\dsh-plugins\dsh-solver-guard` 为 `0.2.1`，已增加 ARM bundle/protocol-first admission、并发 quota reservation、身份白名单、Bohrium job 管理和更完整的 trace/redline 检查；`CAPABILITIES.md` 明确仍是 host-plane 插件，不修改 DSH core，Windows ACL 强隔离默认关闭。
 
-迁移时点本机 `node --test test/*.test.mjs` 为 **163 tests / 151 pass / 12 fail**；本轮现场复测为 **160 tests / 159 pass / 1 fail**。唯一失败是 `test/submit-gates-protocol.test.mjs` 导入未导出的 `harborScoreOf`。当前来源 56 文件 digest 已重新生成并逐一匹配源码；旧清单仍仅用于历史对比。
-
-- 当前唯一测试失败是 `test/submit-gates-protocol.test.mjs` 导入未导出的 `harborScoreOf`；此前 YAML fallback、identity whitelist 和提交并发夹具问题已在来源树修复。该失败仍阻止来源基线达到 clean-green。
-- 因此当前插件不能直接作为 ASCodex 的安全基线；应先修复 `harborScoreOf` 测试契约，再将规则/函数迁移为 Rust policy tests，而不是复制 Node 运行时。
+- 来源基线存在测试契约失败（`harborScoreOf` 导出契约），阻止来源达到 clean-green。
+- 因此当前插件不能直接作为 ASCodex 的安全基线；应先修复测试契约，再将规则/函数迁移为 Rust policy tests，而不是复制 Node 运行时。
 
 ### 新增高风险（迁移前必须处理）
 
@@ -124,12 +122,12 @@ solver-guard crate ───── 六门策略、凭据句柄、原子账本、
 - `traceAdmission` 的“单信号通过”不仅是实现问题，插件 red-team 规格文档也明确如此；ASCodex 应先改规格，再写 Rust 测试，至少要求 provenance 与 tool/artifact/log/cost 中的组合证据。
 - ASCodex 当前约 381 个文件、约 8.3 MB，无 `.git`、无官方 Codex `Cargo.toml`/构建入口；它是知识镜像，不是可运行 fork。官方源码只能以固定 commit 导入为独立 `codex/` 子树。
 
-## 2026-08-27 recheck delta
+## recheck 补充发现
 
-本轮对 `C:\Users\XKZ\dsh-plugins\dsh-solver-guard` v0.2.1 和迁移镜像再次核对，结论如下：
+对 `C:\Users\XKZ\dsh-plugins\dsh-solver-guard` v0.2.1 和迁移镜像再次核对的结论：
 
-- 插件没有 `.git` 或 lockfile；当前 digest 已重新生成并核对通过，后续源码变化仍需显式重生成并核对。
-- 正确测试入口是 `node --test test/*.test.mjs`；`npm test` 没有定义，不能把“无脚本”当成通过。历史迁移时点为 **163 tests / 151 pass / 12 fail**，当前现场为 **160 tests / 159 pass / 1 fail**，唯一失败为 `harborScoreOf` 导出契约。
+- 插件没有 `.git` 或 lockfile；digest 已生成并核对通过，后续源码变化仍需显式重生成并核对。
+- 正确测试入口是 `node --test test/*.test.mjs`；`npm test` 没有定义，不能把“无脚本”当成通过。
 - `checkBohrBudget` 只累计已回填的 `job.cost`，pending/running 任务未按估算成本 reservation；存在并发超预算窗口。ASCodex 必须在 SQLite 中原子预留估算额度，再允许启动任务。
 - `spawnCli`/`spawnBohr` 将整个 `process.env` 传给子进程；迁移版必须使用最小环境白名单，只注入单次凭据句柄，禁止跨 provider 泄漏。
 - `python_only` 仅检查启动命令，脚本内部仍可发起 `requests`/`curl` 等网络写操作；不能把现有 exec 视为提交隔离。必须采用 OS 网络 egress/sandbox 或统一执行 broker。
@@ -138,7 +136,7 @@ solver-guard crate ───── 六门策略、凭据句柄、原子账本、
 
 以上问题均列为 ASCodex P0/P1 验收前置条件；不能通过复制 Node 文件或角色文档宣称已启用硬门。
 
-## 2026-08-28 ASCodex runtime hardening delta
+## ASCodex runtime hardening 已落地项
 
 - Core Tool Registry 现在在 PreToolUse hook 改写参数后重新执行同一 `tool_preflight_with_input`。因此 hook 不能把原本安全的参数改写成提交/网络命令后绕过 solver profile；该检查仍是 Guard broker 之外的纵深防御。
 - `ChannelPolicy` 新增可选 `trusted_cli_root`。若未显式配置，受信 CLI 必须位于 `workspace_root`；配置了该字段时，CLI 路径必须位于其 canonical 子树并通过 SHA-256 校验。

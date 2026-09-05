@@ -2,32 +2,31 @@
 
 > **2026-08-28 覆盖声明**：本文描述的是 DeepSeek Harness 侧历史实现现状；ASCodex 迁移只在 `.agents/skills/` 与本地 `codex/codex-rs` 中落地，且判罚/反作弊契约以 `config/playground-scoring-audit-2026-08-28.md` 为准。本文中的 -1000 翻账与固定 trace 门槛不适用于当前平台。
 
-> 版本：v0.2（与实现对齐）｜原草案：2026-08-22（S4 Round-4 赛后复盘）｜对齐更新：2026-08-25
-> 作者：Chief of Staff（Friday 团队）
+> 版本：v0.2（与实现对齐）
 > 目的：把解题作战中反复依赖提示词工程的纪律，固化为 **DeepSeek Harness 插件的软件边界**。纪律不该靠"记得"，要靠"做不到"。
 > 状态：**已实现**（`dsh-solver-guard` v0.2.0，host 平面插件；本文档描述的是实现现状而非蓝图）。实现拆分见文末 §12。
 
 ---
 
-## 0. 为什么需要这个插件（本次作战的纪律失效清单）
+## 0. 为什么需要这个插件（纪律失效的反模式）
 
-以下全部为 S4 Round-4 实战实证（attempt id 与决策日志可查）：
+实战中反复出现的纪律失效形态（attempt 级证据已归档清理，保留模式结论）：
 
-| # | 纪律域 | 失效事件 | 代价 |
+| # | 纪律域 | 失效模式 | 代价 |
 |---|---|---|---|
-| 1 | 提交间隔 | Friday-01 短窗高频提交 → N16_BURST → 全量翻账 -1000 | 满分 100 被清零，身份永久冻结 |
-| 2 | 提交间隔 | 间隔口径三改（10min→30min→10min→用户取消），靠广播通知 | 各 solver 执行不一致 |
-| 3 | 身份配额 | Friday-02 在 matchgate 超发（15 条 >10 上限）；429 后才顺延 | 身份额度耗尽才发现 |
-| 4 | 身份配额 | 误用非池内凭据（ultron）；Friday-01 冻结后仍有人想用 | 纪律反复重申仍漏 |
-| 5 | 提交方法 | 四步链（带 script）拿到 96.43-100 但**不进官方榜**——通道选错 | 大量"高分"实际 0 收益 |
-| 6 | 提交方法 | 旧 draft 卡死 9.5h（32333/31935/31756），各代理还在"等队列恢复" | 浪费半天无产出 |
-| 7 | 提交方法 | CLI 裸提交 traceCount=0 → 0 分（多题反复踩） | 每题烧 2-4 发 |
-| 8 | trace 质量 | 构造 trace 落 29 档；时间轴伪造落 69 档；只有真实执行 84+ | deep-bsde 95→84 回滚 |
-| 9 | 轮询阻塞 | 子代理 Start-Sleep 420-540s 轮询出分，干等不做别的事 | 大量有效工作时间浪费 |
-| 10 | 污染红线 | banned 扫描靠手工脚本，偶尔漏扫 | 一旦泄漏 = 判官翻账风险 |
-| 11 | 模型路由 | 子代理默认继承错误模型（opencode-go-zen/x-preview-f-free）| 10/10 全部路由错误 |
-| 12 | 消息纪律 | send 不 interrupt → 消息堆积数小时不消费 | 指令失效，代理执行旧任务 |
-| 13 | 收工纪律 | 子代理弱证据收工（封板三问不过即停）| 场上明明还有进攻空间却提前止损 |
+| 1 | 提交间隔 | 同身份短窗高频提交 → N16_BURST → 翻账 | 高分被清零，身份冻结 |
+| 2 | 提交间隔 | 间隔口径反复变更靠广播通知 | 各 solver 执行不一致 |
+| 3 | 身份配额 | 超发（>10 上限）；429 后才顺延 | 身份额度耗尽才发现 |
+| 4 | 身份配额 | 误用非池内/冻结凭据 | 纪律反复重申仍漏 |
+| 5 | 提交方法 | 四步链（带 script）出高分但**不进官方榜**——通道选错 | 大量"高分"实际 0 收益 |
+| 6 | 提交方法 | 旧 draft 卡死数小时，代理还在"等队列恢复" | 浪费半天无产出 |
+| 7 | 提交方法 | CLI 裸提交 traceCount=0 → 0 分 | 每题烧多发 |
+| 8 | trace 质量 | 构造 trace 落 29 档；时间轴伪造落 69 档；只有真实执行 84+ | 落袋分被重评回滚 |
+| 9 | 轮询阻塞 | 子代理 sleep 轮询出分，干等 | 有效工作时间浪费 |
+| 10 | 污染红线 | banned 扫描靠手工，偶尔漏扫 | 泄漏 = 判官翻账风险 |
+| 11 | 模型路由 | 子代理默认继承错误模型 | 全部路由错误 |
+| 12 | 消息纪律 | send 不 interrupt → 消息堆积不消费 | 代理执行旧任务 |
+| 13 | 收工纪律 | 子代理弱证据收工（封板三问不过即停） | 场上还有空间却提前止损 |
 
 **结论**：纪律失效 100% 是"人/模型记得做"型约束，不是"做不到"型约束。软件边界应让违规在物理上不可行。
 
@@ -106,16 +105,12 @@ per_challenge_overrides: {}         # 逐题通道覆盖（如 abacus 判分器�
   - challengeId 归属（提交前 GET challenge 200 + 提交后 GET attempt 核实）。
 - 通道状态探测：`solver-guard_channel-probe <challenge>`（只读 1 发成本，返回通道矩阵）。
 
-**经验映射**：R4-F25（harbor 轨唯一化）、R4-P9（四步链禁用）、R1-P13（CLI traceCount=0）、R4-F26（worker 队列停摆 9.5h）。
-
 ### 3.2 IdentityGate（身份配额门）—— 第二道
 
 **规则源**：
 ```yaml
-identity_pool:                     # 来自 IDENTITY_POOL.md，只读固化
-  Friday-01: { account: friday-n55379-n1, status: FROZEN, per_challenge_limit: 10, cred_file: ... }
-  Friday-02: { account: friday-n55379-n2, status: ACTIVE, per_challenge_limit: 10, cred_file: ... }
-  ...
+identity_pool:                     # 来自 IDENTITY_POOL.md，只读导入
+  <identity>: { account: ..., status: ACTIVE|FROZEN, per_challenge_limit: 10, cred_file: ... }
 model_declaration: "DeepSeek V4 Flash"   # 提交声明模型锁定
 harness_declaration: "DeepSeek Harness"  # 锁定
 ```
@@ -123,12 +118,10 @@ harness_declaration: "DeepSeek Harness"  # 锁定
 **实现**：
 - 插件持有全部凭据（从 `~/.dsh/*credentials.txt` 读取一次，内存持有，**solver 永不接触 token 明文**）。
 - **身份选择三层**：
-  1. **per-agent 白名单（2026-08-25 新增）**：主代理用 `solver-guard_agent-identities set <agent_id> <names...>` 为每个子代理设定可用身份（只有该子代理所属会话可操作，set 时校验身份在池且非 FROZEN）。白名单非空 → 自动选择只在白名单内按**主代理配置顺序**选；显式 `--identity` 出白名单即拒（提示扩权）；429 顺延也限白名单内。
+  1. **per-agent 白名单**：主代理用 `solver-guard_agent-identities set <agent_id> <names...>` 为每个子代理设定可用身份（只有该子代理所属会话可操作，set 时校验身份在池且非 FROZEN）。白名单非空 → 自动选择只在白名单内按**主代理配置顺序**选；显式 `--identity` 出白名单即拒（提示扩权）；429 顺延也限白名单内。
   2. **全局池兜底**：未设定白名单 → 按池声明顺序选第一个 ACTIVE 且 <10 的身份；全满 → 拒绝"身份池耗尽，需总负责人裁决"。
   3. **FROZEN 物理拒绝**：插件层直接拒绝（token 在插件手里，手写凭据无效）。
 - 每次提交成功/失败（429）后自动更新 quota（**不依赖子代理自觉登记**）；429 自动顺延下一身份重试一次。
-
-**经验映射**：R4-F10（Friday-01 冻结）、R1-P49（误用 ultron 凭据）、matchgate Friday-02 超发 15 条、R4-P2（凭据盘点）。
 
 ### 3.3 CadenceGate（提交间隔/防作弊门）—— 第三道
 
@@ -149,8 +142,6 @@ cadence:
   - 同内容 <3600s 或已提交过 → 拒绝。
 - 主代理可用 `solver-guard_cadence-override --identity <name> --reason "..."` 临时放行（**覆盖必须留痕**，events 表）。
 
-**经验映射**：R4-F10（-1000 翻账）、R4-10（N16_BURST -15）、R4-P10（间隔口径回调）。
-
 ### 3.4 RedlineGate（污染红线扫描）—— 第四道
 
 **实现**：
@@ -162,7 +153,7 @@ cadence:
 
 ### 3.5 TraceGate（trace 质量门）—— 第五道
 
-**规则源**（从 TRACE_LAW.md / TRACE_99_RECIPE.md / 红队 TRACE69_VERDICT.md 固化）：
+**规则源**（从 TRACE_LAW.md / TRACE_99_RECIPE.md 固化）：
 ```yaml
 trace_gate:
   min_trace_score: 70              # factor 1.0 门槛（实证 ≥70 而非 80）
@@ -177,31 +168,25 @@ trace_gate:
 - 提交前自动跑机器层 6 条 + 时间轴自洽 + banned 扫描（`solver-guard_trace-validate <trace>` 可单跑，返回通过/拒绝 + 档位预测 29/69/84+）。
 - **真实性标记**：trace 必须携带 provenance（真实会话 JSONL 或显式 execution 记录），校验 artifact 真实存在且 mtime 合理；无真实执行来源 → 拒绝。
 
-**经验映射**：TRACE69_VERDICT（时间轴伪造 → 69）、构造 trace → 29（33179/33251）、真实执行 84+（33052）、trace 门槛 ≥70（32511）。
-
 ### 3.6 ModelGate（模型/路由锁定）—— 第六道
 
 **实现**：
 - 提交命令强制携带 `--model "DeepSeek V4 Flash" --harness "DeepSeek Harness"`（rules.model_declaration / harness_declaration）。
 - 子代理模型/推理路由由 registerContinuableSetup waterfall 强制（provider/model/reasoningEffort），偏离即修正 + 事件告警。
 
-**经验映射**：R4-F2（10/10 路由错误）、R4-P5（reasoningEffort 被拒）。
-
 ### 3.7 ScoreWatcher（异步出分监控——核心非阻塞设计）
 
 **设计要点**：
 - **独立后台守护**（插件进程内定时任务，每 60s 轮询），**绝不占用子代理 turn**。
 - 状态机：`submitted → pending_parse → scored | backfilled | stuck`；回填窗口 30-50min 预期，stuck 阈值 2h（避免误报）；平台 stuckAt 字段直接识别。
-- **推送路由（2026-08-25 定案）**：决策触发事件 → **主代理优先（parentSession），子代理副本**，notifyList 配置名单兜底：
+- **推送路由（定案）**：决策触发事件 → **主代理优先（parentSession），子代理副本**，notifyList 配置名单兜底：
   - 出分回填（score/ready）：`attempt N 已确认进官方榜：harbor=… ts=… → …`；
   - 卡死告警（stuck）：建议放弃并新开 attempt；
   - **trace 反馈（trace/feedback）**：仅当 trace 分低于 accept 档（<70）推送修复方向（band 分类：blocked/review），accept 档不推（避免噪声）。
 - 推送机制：`createPusher` — 子代理在线则 `agent.inject`（不打断），不在线则 cold-resume 后注入。
-- 子代理提交后**立即返回继续工作**（不再 Start-Sleep 轮询）。
+- 子代理提交后**立即返回继续工作**（不再 sleep 轮询）。
 
 **设计论证（为什么主代理优先）**：出分消息不是"知会事件"而是"决策触发事件"——继续攻/换方向/换人/接受封板/调身份配额都取决于它。子代理只有局部信息（自己的题、自己的分），主代理持有全局态势（场上分数横截面、身份池余量、多子代理并行状态）；把引信放在决策者手里是对"执行者自决事故"（超发额度、误用身份、N16 burst、干等卡死）的系统性修复。成本极低（低频 + 异步 inject 不占回合），子代理保留副本没有被剥夺信息。AutoPush 的主代理裁决窗口（§3.9）是同一信息流的上下游。
-
-**经验映射**：子代理 Start-Sleep 420-540s 轮询（T5/T14/T13 多次）、32732 延迟 32min 回填、usct 间歇窗口。
 
 ### 3.8 BohriumGuard（云算力纪律门）
 
@@ -221,11 +206,9 @@ bohr:
 - job 生命周期自动跟踪（submit → running → finished/failed），状态变化推送。
 - 本地长跑命令的**硬拦截未实现**（原草案"直接拒绝本地执行"）：当前由 `solver-guard_exec` 的命令面策略（python_only：只接受 python 脚本形态，禁 shell 元字符）间接限制 + `heavy_must_cloud` 规则 + bohrium-bohr 技能引导承担。
 
-**经验映射**：R1-P9（本地 8GB 内存卡死）、R4-P11（算力升级）、R4-J44（多路训练备战）、成本纪律（R4-35）。
-
 ### 3.9 AutoPush（强制续推——收工纪律的软件边界）
 
-**问题**：子代理弱证据收工（"我尽力了"式报告、封板三问不过）。经验教训：#13。
+**问题**：子代理弱证据收工（"我尽力了"式报告、封板三问不过）。对应 §0 反模式 #13。
 
 **实现**（lib/autopush.js）：
 - `subagent/end` 时对收工报告做封板三问判定（`closure-evidence-standard` 技能标准）：
@@ -279,7 +262,7 @@ bohr:
 | `solver-guard_bohr` | 云算力门禁化（submit/status/download） | ✅ |
 | `solver-guard_agent-register` | 派活登记：档案/题目/工作区创建/沙箱模式 | ✅ |
 | `solver-guard_agent-show` | 查看档案（题目/attempts/磁盘行为/白名单） | ✅ |
-| `solver-guard_agent-identities` | **身份白名单**（2026-08-25）：set/clear/show，仅主代理会话可操作 | ✅ |
+| `solver-guard_agent-identities` | **身份白名单**：set/clear/show，仅主代理会话可操作 | ✅ |
 | `solver-guard_skill-inject` | 手动注入技能卡（主代理指定 agent+skill+reason） | ✅ |
 | `solver-guard_workspace-create` | 插件代管创建标准工作区 | ✅ |
 | `solver-guard_exec` | 命令面（python_only 策略） | ✅ |
@@ -301,7 +284,7 @@ bohr:
 |---|---|
 | `IDENTITY_POOL.md` | 启动时导入 → identity_pool（rules.yaml，只读）；**per-agent 授权走 agent-identities 工具，不再手工登记** |
 | `SCORING_TRUTH.md` / `SUBMISSION_PARADIGM.md` | 固化进 ChannelGate 规则（harbor 轨唯一、无 script、trace≥70）|
-| `TRACE_LAW.md` / `TRACE_99_RECIPE.md` / `TRACE69_VERDICT.md` | 固化进 TraceGate 检查器 |
+| `TRACE_LAW.md` / `TRACE_99_RECIPE.md` | 固化进 TraceGate 检查器 |
 | 技能 `submit-attempt` / `bohrium-bohr` 等 | 技能是知识卡；**执行一律走插件工具**（build-submit/bohr）|
 | `.dsh/skills/`（项目根，33 个） | SkillInjector 编译来源（rules.injector.skillRoots）|
 
@@ -316,10 +299,10 @@ bohr:
 | **P2** | ScoreWatcher 异步守护 + 事件推送 + 回填状态机 | ✅ 已实现（主代理优先推送 + trace 反馈）|
 | **P3** | BohriumGuard + 预算 + 任务生命周期事件 | ✅ 已实现（机型白名单 + 每题预算）|
 | **P4** | ModelGate 自动修正 + 通道状态探测 | ✅ 已实现（提交声明锁定 + 路由 waterfall）|
-| **P1b-P4b** | SkillInjector（编译/阶段检测/纪律刷新/拒绝即教学）| ✅ 已实现（stage→skill 映射可配置，judge 四卡 2026-08-25）|
-| **2026-08-24** | AutoPush 强制续推 + 主代理裁决窗口 + 红队模式 | ✅ 已实现 |
-| **2026-08-24** | 会话隔离（parentSession 可见性）+ exec python_only + 工具面聚焦 | ✅ 已实现 |
-| **2026-08-25** | per-agent 身份白名单（agent-identities）+ 台账 UI 会话作用域 + judge 注入补卡 | ✅ 已实现 |
+| **P1b-P4b** | SkillInjector（编译/阶段检测/纪律刷新/拒绝即教学）| ✅ 已实现（stage→skill 映射可配置，judge 四卡）|
+| **P5** | AutoPush 强制续推 + 主代理裁决窗口 + 红队模式 | ✅ 已实现 |
+| **P6** | 会话隔离（parentSession 可见性）+ exec python_only + 工具面聚焦 | ✅ 已实现 |
+| **P7** | per-agent 身份白名单（agent-identities）+ 台账 UI 会话作用域 + judge 注入补卡 | ✅ 已实现 |
 
 **测试**：`plugins/dsh-solver-guard/test/`（98 例，node --test）：gates / exec / ledger / autopush / injector-monitor / trace-redline / state-submit-bohr / identity-whitelist。
 
@@ -346,7 +329,7 @@ bohr:
 
 ### 10.1 问题定义
 
-子代理在长上下文作战（数百步）后，**最初注入的 Skill 内容被稀释遗忘**。实证：T12 忘"trace ≥70 即 factor 1.0"；T13 忘"只有 CLI 形态触发 harbor"5 连发；T5 忘"riso 形态不可复刻"。
+子代理在长上下文作战（数百步）后，**最初注入的 Skill 内容被稀释遗忘**（实证：多个子代理在长会话后忘记提交纪律/trace 门槛类早期注入内容）。
 
 ### 10.2 注入位置（5 个，全部已实现）
 
@@ -366,10 +349,10 @@ bohr:
 | stuck | 卡住/卡死/等出分/轮询/重试 N 次（**优先于 pre_submit 匹配**）| unstuck-switch-angle |
 | closing | 收关/封板/封顶/收工/止损/天花板/ceiling | closure-evidence-standard |
 | cloud | bohr/bohrium/DFT/GPU/长跑/训练 | bohrium-bohr |
-| judge | 判词/scorecard/harbor/差分/分量/判分器 + solver-guard_score 调用 | platform-scorecard-analyze + oracle-probe + **differential-scoring + judge-field-audit**（2026-08-25 补齐）|
+| judge | 判词/scorecard/harbor/差分/分量/判分器 + solver-guard_score 调用 | platform-scorecard-analyze + oracle-probe + **differential-scoring + judge-field-audit** |
 | handover | 接管/换人/交接 | competition-coordinate |
 
-**精确化（2026-08-25）**：pre_submit 需要"准备提交"语境（"提交后我会…"不触发）；stuck 优先于 pre_submit（"提交完了等出分"判 stuck 不刷提交卡组）；closing 去掉泛词"最优"。
+**匹配精确化**：pre_submit 需要"准备提交"语境（"提交后我会…"不触发）；stuck 优先于 pre_submit（"提交完了等出分"判 stuck 不刷提交卡组）；closing 去掉泛词"最优"。
 
 ### 10.4 纪律卡（时间衰减兜底）—— 每 30 分钟刷新
 

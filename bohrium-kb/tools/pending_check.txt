@@ -1,4 +1,0 @@
-  File "<string>", line 28
-    print(f'{label:10s} aid={a.get(\
-                                  ^
-SyntaxError: '(' was never closed

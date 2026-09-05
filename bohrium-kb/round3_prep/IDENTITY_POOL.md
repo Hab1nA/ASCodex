@@ -47,8 +47,8 @@
    export PLAYGROUND_TOKEN=$(grep -oP 'api_token\s*=\s*\K\S+' ~/.dsh/<凭据文件>)
    ```
 5. **提交轨（证据分层，勿混）**：
-   - **已实测（2026-09-04 晚）**：Worker CLI 通道能被平台完整接收并评分
-     （attempt 39345：`late_scored` + "graded in full"）。
+   - **已实测**：Worker CLI 通道能被平台完整接收并评分（`late_scored` + "graded in full"），
+     不存在 worker_unauthorized 授权缺口。
    - **历史证据（⚠ 评分系统在历史轮次后有变动，不得作为现行依据）**：旧归档曾显示
      harbor 分计入官方榜、带 script 的 bundle/judge 轨出分不收录。
    - **现行判据**：哪条轨计入当前轮榜单，只能用真实提交 + 榜单
@@ -57,15 +57,11 @@
 6. **授权纪律**：真实提交前必须由用户创建 `work/<slug>/.submit-authorized`（提交门钩子校验），
    会话内只 dry-run；`submitted`/`queued` 不是成功，提交后按 submit-attempt Step 5 只读核验。
 
-## Worker 轨状态备忘（非身份条款；2026-09-04 晚探针更新）
+## Worker 轨状态备忘（非身份条款）
 
-- 历史：38872/38875/38876/38932（ultron，CLI 0.1.37）曾全部停在
-  `pending_review + execStatus=failed + scorecard 全 0`，当时判为 worker_unauthorized 授权缺口。
-- **2026-09-04 晚探针（attempt 39345，ultron，CLI 0.1.37，重投 s2 题）**：
-  `status=late_scored`、`scoringDetails.gradable=true`、平台明示 "Received and graded in full"——
-  **Worker 通道已能完整接收并评分，worker_unauthorized 未再出现**。得 0 的原因是
-  s2 题 round 已关闭（`counts_toward_season=false`，迟交不计）+ 判分器未认可旧解。
-  ⚠ 此探针只证明"通道能评分"，**不证明当前轮榜单的计分规则**——现行轮次（T1–T10）
-  的计分依据必须以真实提交 + 榜单 data.json 前后对照实测为准。
-- CLI 升级：0.1.37 → 0.1.39 需 @paper2arm 私有源（公共 npm 无此包；误装同名包 `playground`
-  会搞坏全局命令）。本机 0.1.37 已恢复可用（bin 垫片手工重建于 `%APPDATA%\npm\`）。
+- Worker CLI 通道已实证能完整接收并评分（`status=late_scored`、`scoringDetails.gradable=true`、
+  平台明示 "Received and graded in full"）；迟交得 0 的原因是 round 已关闭
+  （`counts_toward_season=false`）+ 判分器未认可旧解，不是通道问题。
+- ⚠ "通道能评分"**不证明当前轮榜单的计分规则**——现行轮次的计分依据必须以真实提交 +
+  榜单 data.json 前后对照实测为准。
+- CLI 升级需 @paper2arm 私有源（公共 npm 无此包；误装同名包 `playground` 会搞坏全局命令）。
