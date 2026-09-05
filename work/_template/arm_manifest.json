@@ -32,11 +32,17 @@
       "type": "metric",
       "description": "CHANGE_ME",
       "path": "outputs/answer.txt",
-      "produced_by": ["answer_txt", "result_json"]
+      "produced_by": [
+        "answer_txt",
+        "result_json"
+      ]
     }
   ],
   "agents_used": [
-    {"agent_id": "CHANGE_ME_solver", "role": "implementation, verification, packaging"}
+    {
+      "agent_id": "CHANGE_ME_solver",
+      "role": "implementation, verification, packaging"
+    }
   ],
   "execution": {
     "ran_at": "CHANGE_ME_ISO8601_START",
@@ -45,15 +51,60 @@
     "wall_time_s": 3600,
     "log_path": "execution/run.log",
     "artifacts": [
-      {"format": "txt", "id": "answer_txt", "path": "outputs/answer.txt", "type": "metric"},
-      {"format": "json", "id": "result_json", "path": "execution/results/result.json", "type": "metric"},
-      {"format": "json", "id": "results_json", "path": "results_json.json", "type": "metric"},
-      {"format": "txt", "id": "run_log", "path": "execution/run.log", "type": "log"},
-      {"format": "other", "id": "report_md", "path": "REPORT.md", "type": "data"},
-      {"format": "json", "id": "manifest_json", "path": "arm_manifest.json", "type": "data"},
-      {"format": "txt", "id": "raw_messages_root", "path": "raw_messages.jsonl", "type": "data"},
-      {"format": "txt", "id": "raw_messages_trace", "path": "trace/raw_messages.jsonl", "type": "data"},
-      {"format": "json", "id": "trajectory_meta", "path": "trace/trajectory_meta.json", "type": "data"}
+      {
+        "format": "txt",
+        "id": "answer_txt",
+        "path": "outputs/answer.txt",
+        "type": "metric"
+      },
+      {
+        "format": "json",
+        "id": "result_json",
+        "path": "execution/results/result.json",
+        "type": "metric"
+      },
+      {
+        "format": "json",
+        "id": "results_json",
+        "path": "results_json.json",
+        "type": "metric"
+      },
+      {
+        "format": "txt",
+        "id": "run_log",
+        "path": "execution/run.log",
+        "type": "log"
+      },
+      {
+        "format": "other",
+        "id": "report_md",
+        "path": "REPORT.md",
+        "type": "data"
+      },
+      {
+        "format": "json",
+        "id": "manifest_json",
+        "path": "arm_manifest.json",
+        "type": "data"
+      },
+      {
+        "format": "txt",
+        "id": "raw_messages_root",
+        "path": "raw_messages.jsonl",
+        "type": "data"
+      },
+      {
+        "format": "txt",
+        "id": "raw_messages_trace",
+        "path": "trace/raw_messages.jsonl",
+        "type": "data"
+      },
+      {
+        "format": "json",
+        "id": "trajectory_meta",
+        "path": "trace/trajectory_meta.json",
+        "type": "data"
+      }
     ]
   },
   "trace": {
@@ -61,7 +112,11 @@
   },
   "handoff": {
     "status": "partial",
-    "next_owner_hint": "reviewer",
+    "next_owner_hint": {
+      "modality": "execution",
+      "suggested_role": "any-agent",
+      "rationale": "Verify outputs against the paper reference."
+    },
     "next_suggestion": "Verify outputs against the paper reference.",
     "modality_notes": {},
     "modality_coverage": {}

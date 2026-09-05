@@ -17,6 +17,10 @@ UPSTREAM_MARKER_FIXTURES = {
     Path("codex/codex-rs/app-server-protocol/schema/typescript/v2/CliAuthCredentialsStoreMode.ts"),
 }
 
+# 公共 CA 证书包（OpenSSL/conda 发行版自带，内容是公开根证书而非私钥）：
+# 豁免 .pem 名称检查；内容检查（PRIVATE KEY / asp_ 标记）仍然生效。
+PUBLIC_PEM_BASENAMES = {"cacert.pem"}
+
 
 def test_harness_skill_inventory_is_complete() -> None:
     skills = sorted((ROOT / "skills" / "deepseek-harness").glob("*/SKILL.md"))
@@ -55,7 +59,8 @@ def test_no_runtime_credentials_or_private_keys_are_migrated() -> None:
             part.startswith("target") for part in relative.parts
         ):
             continue
-        if forbidden_name.search(path.name) and relative not in UPSTREAM_MARKER_FIXTURES:
+        if forbidden_name.search(path.name) and relative not in UPSTREAM_MARKER_FIXTURES \
+                and path.name.lower() not in PUBLIC_PEM_BASENAMES:
             raise AssertionError(path)
         if path.stat().st_size > 2_000_000:
             continue
